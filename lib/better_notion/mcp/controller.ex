@@ -18,41 +18,43 @@ defmodule BetterNotion.MCP.Controller do
 
     case File.read(fixture_path) do
       {:ok, content} ->
-        lines = String.split(content, "\n")
-        total_lines = length(lines)
-        biggest_line_num = total_lines |> Integer.to_string() |> String.length()
-
-        offset = max((args["offset"] || 1) - 1, 0)
-        limit = args["limit"]
-
-        selected =
-          lines
-          |> Enum.with_index(1)
-          |> Enum.drop(offset)
-          |> then(fn lines ->
-            if limit, do: Enum.take(lines, limit), else: lines
-          end)
-
-        numbered =
-          selected
-          |> Enum.map(fn {line, num} ->
-            String.pad_leading("  " <> Integer.to_string(num), biggest_line_num) <> "  " <> line
-          end)
-          |> Enum.join("\n")
-
-        remaining = total_lines - offset - length(selected)
-
-        output =
-          if limit && remaining > 0 do
-            numbered <> "\n... (#{remaining} more lines)"
-          else
-            numbered
-          end
-
+        output = format_file_content(content, args)
         {:ok, CallResult.new(content: [ToolContent.text(output)])}
 
       {:error, :enoent} ->
         {:error, "Document not found: #{page_id}"}
+    end
+  end
+
+  def format_file_content(content, args \\ %{}) do
+    lines = String.split(content, "\n")
+    total_lines = length(lines)
+    biggest_line_num = total_lines |> Integer.to_string() |> String.length()
+
+    offset = max((args["offset"] || 1) - 1, 0)
+    limit = args["limit"]
+
+    selected =
+      lines
+      |> Enum.with_index(1)
+      |> Enum.drop(offset)
+      |> then(fn lines ->
+        if limit, do: Enum.take(lines, limit), else: lines
+      end)
+
+    numbered =
+      selected
+      |> Enum.map(fn {line, num} ->
+        String.pad_leading("  " <> Integer.to_string(num), biggest_line_num) <> "  " <> line
+      end)
+      |> Enum.join("\n")
+
+    remaining = total_lines - offset - length(selected)
+
+    if limit && remaining > 0 do
+      numbered <> "\n... (#{remaining} more lines)"
+    else
+      numbered
     end
   end
 
