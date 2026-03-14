@@ -97,9 +97,7 @@ defmodule BetterNotion.Document do
   end
 
   defp fetch_from_notion(page_id) do
-    # For demonstration, we read from a local fixture file named after the page_id.
-    # In a real implementation, this would call the Notion API to fetch the page content.
-    File.read(Path.join(@fixtures_dir, page_id <> ".md"))
+    BetterNotion.NotionMcpManager.fetch_document(page_id)
   end
 
   def send_file_to_notion(path, content) do

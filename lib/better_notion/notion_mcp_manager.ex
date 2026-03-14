@@ -20,6 +20,25 @@ defmodule BetterNotion.NotionMcpManager do
 
   # --- Public API ---
 
+  @doc """
+  Fetches a Notion document content by calling the appropriate tool on the MCP server.
+  It returns the content of the document as a markdown formatted string.
+  """
+  @spec fetch_document(String.t()) :: {:ok, String.t()} | {:error, any()}
+  def fetch_document(page_id) do
+    with {:ok, result} <- call_tool("notion-fetch", %{"id" => page_id}) do
+      text =
+        result["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!() |> Map.get("text")
+
+      Regex.scan(~r/<content>(.*?)<\/content>/s, text, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.join("\n")
+      |> then(&{:ok, &1})
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
