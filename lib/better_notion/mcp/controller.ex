@@ -14,47 +14,19 @@ defmodule BetterNotion.MCP.Controller do
 
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = extract_page_id(page)
-    fixture_path = Path.join(@fixtures_dir, "#{page_id}.md")
+    path = args["path"] || Path.join(System.tmp_dir!(), "#{page_id}.md")
 
-    case File.read(fixture_path) do
+    unless Path.absname(path) == path do
+      raise ArgumentError, "path must be absolute, got: #{path}"
+    end
+
+    case fetch_document_from_notion(page_id) do
       {:ok, content} ->
-        output = format_file_content(content, args)
-        {:ok, CallResult.new(content: [ToolContent.text(output)])}
+        File.write!(path, content)
+        {:ok, CallResult.new(content: [ToolContent.text(path)])}
 
       {:error, :enoent} ->
         {:error, "Document not found: #{page_id}"}
-    end
-  end
-
-  def format_file_content(content, args \\ %{}) do
-    lines = String.split(content, "\n")
-    total_lines = length(lines)
-    biggest_line_num = total_lines |> Integer.to_string() |> String.length()
-
-    offset = max((args["offset"] || 1) - 1, 0)
-    limit = args["limit"]
-
-    selected =
-      lines
-      |> Enum.with_index(1)
-      |> Enum.drop(offset)
-      |> then(fn lines ->
-        if limit, do: Enum.take(lines, limit), else: lines
-      end)
-
-    numbered =
-      selected
-      |> Enum.map(fn {line, num} ->
-        String.pad_leading("  " <> Integer.to_string(num), biggest_line_num) <> "  " <> line
-      end)
-      |> Enum.join("\n")
-
-    remaining = total_lines - offset - length(selected)
-
-    if limit && remaining > 0 do
-      numbered <> "\n... (#{remaining} more lines)"
-    else
-      numbered
     end
   end
 
@@ -69,6 +41,17 @@ defmodule BetterNotion.MCP.Controller do
 
       _ ->
         page
+    end
+  end
+
+  defp fetch_document_from_notion(page_id) do
+    # For demonstration, we read from a local fixture file named after the page_id.
+    # In a real implementation, this would call the Notion API to fetch the page content.
+    file_path = Path.join(@fixtures_dir, "#{page_id}.md")
+
+    case File.read(file_path) do
+      {:ok, content} -> {:ok, content}
+      {:error, reason} -> {:error, reason}
     end
   end
 end

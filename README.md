@@ -33,10 +33,7 @@ Better Notion exposes three MCP tools:
 ### `fetch_document`
 
 Fetches a Notion document via the official Notion MCP and creates a local text representation of it. This local copy is what the LLM reads and edits.
-
-### `update_document`
-
-Applies changes to the local document representation using an edit-based interface similar to modern IDE file-editing tools (find and replace). No calls to Notion are made at this stage.
+The fetch tool will return to the LLM the path to the local version of the document. This document is stored in a temporary created directory tied with the session and will be deleted when the session ends. The LLM can read and edit this local document as needed before committing changes back to Notion.
 
 ### `commit_document`
 
@@ -45,5 +42,5 @@ Pushes the locally updated document back to Notion through the official MCP serv
 ## How it works
 
 1. The LLM calls `fetch_document` to retrieve a Notion page. Better Notion fetches the page via the official Notion MCP and builds a local text representation.
-2. The LLM calls `update_document` one or more times to edit the local copy, using familiar find-and-replace semantics.
+2. The LLM can read and edit this local document as needed.
 3. When edits are complete, the LLM calls `commit_document`. Better Notion diffs the local representation against the original, translates the changes into Notion API operations, and applies them via the official MCP server.

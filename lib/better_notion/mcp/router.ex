@@ -10,14 +10,25 @@ defmodule BetterNotion.MCP.Router do
   end
 
   tool "fetch_document",
-       "Fetches a Notion document and returns its content as line-numbered markdown. " <>
-         "Accepts a Notion URL or page ID. Use offset/limit to read large documents in chunks.",
+       """
+       Fetches a Notion document and returns a path where the document has been saved.
+       Accepts a Notion URL or page ID.
+       Optionally the tool accept to receive a path to a local file where the document should be saved. If not provided, the tool will create a temporary file and return its path.
+       """,
        BetterNotion.MCP.Controller,
        :fetch_document,
        read_only_hint: true,
        idempotent_hint: true do
     input_field("page", "Notion page URL or page UUID", :string, required: true)
-    input_field("offset", "Line number to start reading from (1-based, default: 1)", :integer)
-    input_field("limit", "Maximum number of lines to return", :integer)
+
+    input_field(
+      "path",
+      """
+      Optional path to save the document. If not provided, a temporary file will be created.
+      PREFER providing a path when you need to edit the document, as it will avoid the user to have to validate the file access in the OS.
+      The path MUST be an absolute path.
+      """,
+      :string
+    )
   end
 end
