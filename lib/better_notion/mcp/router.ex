@@ -9,6 +9,17 @@ defmodule BetterNotion.MCP.Router do
     output_field("response", "The pong response", :string)
   end
 
+  tool "commit_document",
+       """
+       Commits local changes to a Notion document back to Notion.
+       Accepts the path to a local document that was previously fetched.
+       Will detect conflicts between local and remote changes.
+       """,
+       BetterNotion.MCP.Controller,
+       :commit_document do
+    input_field("path", "Absolute path to the local document file", :string, required: true)
+  end
+
   tool "fetch_document",
        """
        Fetches a Notion document and returns a path where the document has been saved.

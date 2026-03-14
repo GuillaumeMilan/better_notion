@@ -17,6 +17,21 @@ defmodule BetterNotion.Document do
     end
   end
 
+  def commit(path) do
+    case diff(path) do
+      {:ok, :no_conflict, new_content} ->
+        send_file_to_notion(path, new_content)
+        {:ok, :committed}
+
+      {:ok, :conflict, diff} ->
+        # There are conflicts that need to be resolved before committing changes
+        {:ok, {:conflict, diff}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   def extract_page_id(page) do
     case URI.parse(page) do
       %URI{host: host, path: path} when not is_nil(host) and not is_nil(path) ->
@@ -51,6 +66,7 @@ defmodule BetterNotion.Document do
          {:ok, metadata} <- Jason.decode(meta_content),
          {:ok, current_content} <- File.read(path),
          {:ok, server_content} <- fetch_from_notion(metadata["page_id"]) do
+      update_metadata!(path, server_content)
       diff3(current_content, metadata["content"], server_content)
     else
       {:error, reason} -> {:error, reason}
@@ -86,6 +102,18 @@ defmodule BetterNotion.Document do
     File.read(Path.join(@fixtures_dir, page_id))
   end
 
+  def send_file_to_notion(path, content) do
+    with {:ok, meta_content} <- File.read(file_metadata_path(path)),
+         {:ok, metadata} <- Jason.decode(meta_content) do
+      page_id = metadata["page_id"]
+      File.write(Path.join(@fixtures_dir, page_id), content)
+    else
+      {:error, reason} -> {:error, reason}
+    end
+
+    :ok
+  end
+
   defp create_metadata!(page_id, path, content) do
     metadata = %{
       page_id: page_id,
@@ -97,6 +125,15 @@ defmodule BetterNotion.Document do
     meta_path = file_metadata_path(path)
     File.mkdir_p!(Path.dirname(meta_path))
     File.write!(meta_path, Jason.encode!(metadata))
+  end
+
+  defp update_metadata!(path, new_content) do
+    meta_path = file_metadata_path(path)
+
+    meta_content = File.read!(meta_path)
+    metadata = Jason.decode!(meta_content)
+    new_metadata = Map.put(metadata, "content", new_content)
+    File.write!(meta_path, Jason.encode!(new_metadata))
   end
 
   defp file_metadata_path(path) do

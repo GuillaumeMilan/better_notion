@@ -11,6 +11,19 @@ defmodule BetterNotion.MCP.Controller do
     {:ok, CallResult.new(content: [ToolContent.text("pong")])}
   end
 
+  def commit_document(_conn, %{"path" => path}) do
+    case Document.commit(path) do
+      {:ok, :committed} ->
+        {:ok, CallResult.new(content: [ToolContent.text("Document committed successfully")])}
+
+      {:ok, {:conflict, diff}} ->
+        {:error, "Conflict detected. Please resolve before committing:\n#{diff}"}
+
+      {:error, reason} ->
+        {:error, "Failed to commit document: #{inspect(reason)}"}
+    end
+  end
+
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
 
