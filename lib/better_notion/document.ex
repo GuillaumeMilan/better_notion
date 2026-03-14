@@ -3,8 +3,6 @@ defmodule BetterNotion.Document do
   Handles fetching Notion documents and managing their metadata.
   """
 
-  @fixtures_dir Application.app_dir(:better_notion, "priv/fixtures")
-
   def fetch(page_id, path) do
     case fetch_from_notion(page_id) do
       {:ok, content} ->
@@ -20,8 +18,10 @@ defmodule BetterNotion.Document do
   def commit(path) do
     case diff(path) do
       {:ok, :no_conflict, new_content} ->
-        send_file_to_notion(path, new_content)
-        {:ok, :committed}
+        case send_file_to_notion(path, new_content) do
+          {:ok, _} -> {:ok, :committed}
+          {:error, reason} -> {:error, reason}
+        end
 
       {:ok, :conflict, diff} ->
         # There are conflicts that need to be resolved before committing changes
@@ -102,14 +102,11 @@ defmodule BetterNotion.Document do
 
   def send_file_to_notion(path, content) do
     with {:ok, meta_content} <- File.read(file_metadata_path(path)),
-         {:ok, metadata} <- Jason.decode(meta_content) do
-      page_id = metadata["page_id"]
-      File.write(Path.join(@fixtures_dir, page_id <> ".md"), content)
-    else
-      {:error, reason} -> {:error, reason}
+         {:ok, metadata} <- Jason.decode(meta_content),
+         updates = compute_updates(metadata["content"], content),
+         {:ok, _} <- BetterNotion.NotionMcpManager.update_page(metadata["page_id"], updates) do
+      update_metadata!(path, content)
     end
-
-    :ok
   end
 
   defp create_metadata!(page_id, path, content) do
@@ -142,6 +139,145 @@ defmodule BetterNotion.Document do
 
     Path.join([:code.priv_dir(:better_notion), subfolder, filename])
   end
+
+  @doc """
+  Computes the update chunks needed to transform `server_content` into `updated_content`.
+
+  Returns a list of `%{old_str: String.t(), new_str: String.t()}` maps suitable
+  for passing to `NotionMcpManager.update_page/2`.
+  """
+  @spec compute_updates(String.t(), String.t()) :: [%{old_str: String.t(), new_str: String.t()}]
+  def compute_updates(server_content, updated_content) do
+    server_lines = String.split(server_content, "\n")
+    updated_lines = String.split(updated_content, "\n")
+
+    List.myers_difference(server_lines, updated_lines)
+    |> collect_raw_changes()
+    |> ensure_unique_context(server_content)
+    |> Enum.map(fn {old_lines, new_lines} ->
+      %{old_str: Enum.join(old_lines, "\n"), new_str: Enum.join(new_lines, "\n")}
+    end)
+  end
+
+  # Collects raw changes as {prev_eq, change_old, change_new, next_eq} tuples.
+  defp collect_raw_changes(diff_ops) do
+    collect_raw_changes(diff_ops, _prev_eq = [], [])
+  end
+
+  defp collect_raw_changes([], _prev_eq, acc), do: Enum.reverse(acc)
+
+  defp collect_raw_changes([{:eq, lines} | rest], _prev_eq, acc) do
+    collect_raw_changes(rest, lines, acc)
+  end
+
+  defp collect_raw_changes([{op, lines} | rest], prev_eq, acc) when op in [:del, :ins] do
+    {change_old, change_new, rest} = collect_change(op, lines, rest)
+    {next_eq, rest} = take_next_eq(rest)
+
+    entry = {prev_eq, change_old, change_new, next_eq}
+    collect_raw_changes(rest, next_eq, [entry | acc])
+  end
+
+  # Collects consecutive :del/:ins operations into a single change.
+  defp collect_change(:del, del_lines, [{:ins, ins_lines} | rest]) do
+    {del_lines, ins_lines, rest}
+  end
+
+  defp collect_change(:del, del_lines, rest), do: {del_lines, [], rest}
+  defp collect_change(:ins, ins_lines, rest), do: {[], ins_lines, rest}
+
+  # Takes the next :eq segment from the remaining ops, if present.
+  defp take_next_eq([{:eq, lines} | rest]), do: {lines, rest}
+  defp take_next_eq(rest), do: {[], rest}
+
+  # Adds minimal surrounding context to each change so that old_str is
+  # unique within the server content. Starts with 1 line of context and
+  # expands until unique or all available context is used.
+  # When a chunk can't be made unique with its available context, it gets
+  # merged with the next chunk (absorbing the shared eq segment).
+  defp ensure_unique_context(raw_changes, server_content) do
+    raw_changes
+    |> merge_until_unique(server_content)
+    |> Enum.map(fn {prev_eq, change_old, change_new, next_eq} ->
+      expand_context(prev_eq, change_old, change_new, next_eq, server_content, _n = 1)
+    end)
+  end
+
+  # Iteratively merges adjacent raw changes when a chunk cannot be made
+  # unique with its available context alone.
+  defp merge_until_unique(raw_changes, server_content) do
+    case try_merge_pass(raw_changes, server_content) do
+      {:unchanged, result} -> result
+      {:merged, result} -> merge_until_unique(result, server_content)
+    end
+  end
+
+  defp try_merge_pass([], _server_content), do: {:unchanged, []}
+  defp try_merge_pass([single], _server_content), do: {:unchanged, [single]}
+
+  defp try_merge_pass(
+         [
+           {prev_eq1, old1, new1, shared_eq} = chunk1,
+           {_prev_eq2, old2, new2, next_eq2} = chunk2 | rest
+         ],
+         server_content
+       ) do
+    if needs_merge?(chunk1, server_content) or needs_merge?(chunk2, server_content) do
+      merged = {prev_eq1, old1 ++ shared_eq ++ old2, new1 ++ shared_eq ++ new2, next_eq2}
+      {:merged, [merged | rest]}
+    else
+      {status, tail} = try_merge_pass([chunk2 | rest], server_content)
+      {status, [chunk1 | tail]}
+    end
+  end
+
+  # Checks if a chunk cannot be made unique with all its available context.
+  defp needs_merge?({prev_eq, change_old, _change_new, next_eq}, server_content) do
+    old_lines = prev_eq ++ change_old ++ next_eq
+    old_str = Enum.join(old_lines, "\n")
+    not unique_in?(old_str, server_content)
+  end
+
+  defp expand_context(prev_eq, change_old, change_new, next_eq, server_content, n) do
+    ctx_before = last_n(prev_eq, n)
+    ctx_after = first_n(next_eq, n)
+
+    old_lines = ctx_before ++ change_old ++ ctx_after
+    old_str = Enum.join(old_lines, "\n")
+
+    max_context_reached =
+      length(ctx_before) >= length(prev_eq) and length(ctx_after) >= length(next_eq)
+
+    if max_context_reached or unique_in?(old_str, server_content) do
+      new_lines = ctx_before ++ change_new ++ ctx_after
+      {old_lines, new_lines}
+    else
+      expand_context(prev_eq, change_old, change_new, next_eq, server_content, n + 1)
+    end
+  end
+
+  defp unique_in?("", _content), do: false
+
+  defp unique_in?(substring, content) do
+    count_occurrences(content, substring, 0) == 1
+  end
+
+  defp count_occurrences(content, substring, count) when count <= 1 do
+    case :binary.match(content, substring) do
+      {pos, _len} ->
+        rest_start = pos + 1
+        rest = :binary.part(content, rest_start, byte_size(content) - rest_start)
+        count_occurrences(rest, substring, count + 1)
+
+      :nomatch ->
+        count
+    end
+  end
+
+  defp count_occurrences(_content, _substring, count), do: count
+
+  defp last_n(list, n), do: Enum.slice(list, -n..-1//1)
+  defp first_n(list, n), do: Enum.take(list, n)
 
   defp hash(content) do
     :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)

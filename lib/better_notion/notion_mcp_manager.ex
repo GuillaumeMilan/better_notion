@@ -39,6 +39,28 @@ defmodule BetterNotion.NotionMcpManager do
     end
   end
 
+  @doc """
+  Updates a Notion document content by calling the appropriate tool on the MCP server.
+  The `updates` argument is a list of maps with the following structure:
+  ```
+  %{
+    old_str: "string to be replaced",
+    new_str: "string to replace with"
+  }
+  ```
+  """
+  @spec update_page(String.t(), list(%{old_str: String.t(), new_str: String.t()})) ::
+          {:ok, any()} | {:error, any()}
+  def update_page(page_id, updates) do
+    args = %{
+      "page_id" => page_id,
+      "command" => "update_content",
+      "content_updates" => updates
+    }
+
+    call_tool("notion-update-page", args)
+  end
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
