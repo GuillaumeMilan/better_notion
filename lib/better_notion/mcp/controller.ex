@@ -6,7 +6,66 @@ defmodule BetterNotion.MCP.Controller do
   alias McpServer.Tool.Content, as: ToolContent
   alias McpServer.Tool.CallResult
 
+  @fixtures_dir Application.app_dir(:better_notion, "priv/fixtures")
+
   def ping(_conn, _args) do
     {:ok, CallResult.new(content: [ToolContent.text("pong")])}
+  end
+
+  def fetch_document(_conn, %{"page" => page} = args) do
+    page_id = extract_page_id(page)
+    fixture_path = Path.join(@fixtures_dir, "#{page_id}.md")
+
+    case File.read(fixture_path) do
+      {:ok, content} ->
+        lines = String.split(content, "\n")
+        total_lines = length(lines)
+
+        offset = max((args["offset"] || 1) - 1, 0)
+        limit = args["limit"]
+
+        selected =
+          lines
+          |> Enum.with_index(1)
+          |> Enum.drop(offset)
+          |> then(fn lines ->
+            if limit, do: Enum.take(lines, limit), else: lines
+          end)
+
+        numbered =
+          selected
+          |> Enum.map(fn {line, num} ->
+            String.pad_leading(Integer.to_string(num), 4) <> "\t" <> line
+          end)
+          |> Enum.join("\n")
+
+        remaining = total_lines - offset - length(selected)
+
+        output =
+          if limit && remaining > 0 do
+            numbered <> "\n... (#{remaining} more lines)"
+          else
+            numbered
+          end
+
+        {:ok, CallResult.new(content: [ToolContent.text(output)])}
+
+      {:error, :enoent} ->
+        {:error, "Document not found: #{page_id}"}
+    end
+  end
+
+  defp extract_page_id(page) do
+    case URI.parse(page) do
+      %URI{host: host, path: path} when not is_nil(host) and not is_nil(path) ->
+        path
+        |> String.split("/")
+        |> List.last("")
+        |> String.split("-")
+        |> List.last("")
+
+      _ ->
+        page
+    end
   end
 end
