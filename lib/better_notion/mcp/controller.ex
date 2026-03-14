@@ -20,6 +20,7 @@ defmodule BetterNotion.MCP.Controller do
       {:ok, content} ->
         lines = String.split(content, "\n")
         total_lines = length(lines)
+        biggest_line_num = total_lines |> Integer.to_string() |> String.length()
 
         offset = max((args["offset"] || 1) - 1, 0)
         limit = args["limit"]
@@ -35,7 +36,7 @@ defmodule BetterNotion.MCP.Controller do
         numbered =
           selected
           |> Enum.map(fn {line, num} ->
-            String.pad_leading(Integer.to_string(num), 4) <> "\t" <> line
+            String.pad_leading("  " <> Integer.to_string(num), biggest_line_num) <> "  " <> line
           end)
           |> Enum.join("\n")
 
