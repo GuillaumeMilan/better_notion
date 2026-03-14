@@ -7,13 +7,18 @@ defmodule BetterNotion.Application do
 
   @impl true
   def start(_type, _args) do
+    port = Application.get_env(:better_notion, :mcp_port, 4000)
+
     children = [
-      # Starts a worker by calling: BetterNotion.Worker.start_link(arg)
-      # {BetterNotion.Worker, arg}
+      {Bandit,
+       plug:
+         {McpServer.HttpPlug,
+          router: BetterNotion.MCP.Router,
+          server_info: %{name: "BetterNotion MCP Server", version: "0.1.0"}},
+       port: port,
+       ip: {127, 0, 0, 1}}
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: BetterNotion.Supervisor]
     Supervisor.start_link(children, opts)
   end
