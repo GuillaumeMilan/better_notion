@@ -221,12 +221,8 @@ defmodule BetterNotion.NotionAuth do
 
       auth_url = build_authorization_url(discovery_info, client_info, pkce_params, state, redirect_uri)
 
-      Logger.info("OAuth authorization required. Please open this URL in your browser:")
-      IO.puts("\n" <> String.duplicate("=", 60))
-      IO.puts("AUTHORIZE WITH NOTION")
-      IO.puts(String.duplicate("=", 60))
-      IO.puts("\n#{auth_url}\n")
-      IO.puts(String.duplicate("=", 60) <> "\n")
+      Logger.info("OAuth authorization required. Opening browser...")
+      open_in_browser(auth_url)
 
       # Wait for the callback to notify us (up to 5 minutes)
       receive do
@@ -240,6 +236,16 @@ defmodule BetterNotion.NotionAuth do
           BetterNotion.TokenStore.delete_oauth_state(state)
           {:error, :auth_timeout}
       end
+    end
+  end
+
+  # --- Browser Helper ---
+
+  defp open_in_browser(url) do
+    case :os.type() do
+      {:unix, :darwin} -> System.cmd("open", [url])
+      {:unix, _} -> System.cmd("xdg-open", [url])
+      {:win32, _} -> System.cmd("cmd", ["/c", "start", url])
     end
   end
 
