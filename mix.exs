@@ -14,7 +14,7 @@ defmodule BetterNotion.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :inets, :ssl],
       mod: {BetterNotion.Application, []}
     ]
   end
@@ -22,6 +22,8 @@ defmodule BetterNotion.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:hackney, "~> 1.17"},
+      {:jason, "~> 1.4"},
       {:mcp_server, "~> 0.8.0"},
       {:bandit, "~> 1.0"}
     ]

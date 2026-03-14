@@ -10,9 +10,10 @@ defmodule BetterNotion.Application do
     port = Application.get_env(:better_notion, :mcp_port, 4000)
 
     children = [
+      BetterNotion.TokenStore,
       {Bandit,
        plug:
-         {McpServer.HttpPlug,
+         {BetterNotion.RootPlug,
           router: BetterNotion.MCP.Router,
           server_info: %{name: "BetterNotion MCP Server", version: "0.1.0"}},
        port: port,

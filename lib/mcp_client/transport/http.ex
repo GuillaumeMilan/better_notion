@@ -130,8 +130,11 @@ defmodule McpClient.Transport.Http do
           {:ok, update_connection_state(state, ref, connection_state)}
 
         401 ->
-          # perform_authentication(ref, state)
-          raise "Authentication required but auth module support not-yet implemented"
+          Logger.warning("Received 401 - authentication required")
+          draining_responses(ref)
+          notify_auth_required(state.client)
+          state = may_send_error_to_client(state, ref, {:auth_required, %{}})
+          {:ok, state}
 
         status_code ->
           Logger.warning("Received unexpected HTTP status code: #{status_code}")
@@ -304,6 +307,17 @@ defmodule McpClient.Transport.Http do
         Map.put(headers, "Mcp-Session-Id", state.mcp_session_id)
       else
         headers
+      end
+
+    # Add auth token if available and not already set
+    headers =
+      if Map.has_key?(headers, "Authorization") do
+        headers
+      else
+        case BetterNotion.TokenStore.get_access_token() do
+          {:ok, token} -> Map.put(headers, "Authorization", "Bearer #{token}")
+          _ -> headers
+        end
       end
 
     # Add Accept header
