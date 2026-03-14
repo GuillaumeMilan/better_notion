@@ -99,14 +99,14 @@ defmodule BetterNotion.Document do
   defp fetch_from_notion(page_id) do
     # For demonstration, we read from a local fixture file named after the page_id.
     # In a real implementation, this would call the Notion API to fetch the page content.
-    File.read(Path.join(@fixtures_dir, page_id))
+    File.read(Path.join(@fixtures_dir, page_id <> ".md"))
   end
 
   def send_file_to_notion(path, content) do
     with {:ok, meta_content} <- File.read(file_metadata_path(path)),
          {:ok, metadata} <- Jason.decode(meta_content) do
       page_id = metadata["page_id"]
-      File.write(Path.join(@fixtures_dir, page_id), content)
+      File.write(Path.join(@fixtures_dir, page_id <> ".md"), content)
     else
       {:error, reason} -> {:error, reason}
     end
