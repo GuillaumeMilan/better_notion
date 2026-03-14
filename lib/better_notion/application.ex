@@ -17,7 +17,8 @@ defmodule BetterNotion.Application do
           router: BetterNotion.MCP.Router,
           server_info: %{name: "BetterNotion MCP Server", version: "0.1.0"}},
        port: port,
-       ip: {127, 0, 0, 1}}
+       ip: {127, 0, 0, 1}},
+      BetterNotion.NotionMcpManager
     ]
 
     opts = [strategy: :one_for_one, name: BetterNotion.Supervisor]

@@ -45,7 +45,10 @@ defmodule BetterNotion.NotionAuth do
   end
 
   defp get_authorization_server(%{"authorization_servers" => [server | _]}), do: server
-  defp get_authorization_server(%{"authorization_servers" => server}) when is_binary(server), do: server
+
+  defp get_authorization_server(%{"authorization_servers" => server}) when is_binary(server),
+    do: server
+
   defp get_authorization_server(_), do: "https://oauth.notion.com"
 
   # --- Dynamic Client Registration ---
@@ -219,7 +222,8 @@ defmodule BetterNotion.NotionAuth do
 
       BetterNotion.TokenStore.store_oauth_state(state, oauth_state)
 
-      auth_url = build_authorization_url(discovery_info, client_info, pkce_params, state, redirect_uri)
+      auth_url =
+        build_authorization_url(discovery_info, client_info, pkce_params, state, redirect_uri)
 
       Logger.info("OAuth authorization required. Opening browser...")
       open_in_browser(auth_url)

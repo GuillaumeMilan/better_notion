@@ -70,10 +70,18 @@ defmodule BetterNotion.OAuthCallbackPlug do
         end
 
       {:error, :state_not_found} ->
-        send_html(conn, 400, error_page("invalid_state", "OAuth state not found. Please try again."))
+        send_html(
+          conn,
+          400,
+          error_page("invalid_state", "OAuth state not found. Please try again.")
+        )
 
       {:error, :state_expired} ->
-        send_html(conn, 400, error_page("state_expired", "OAuth session expired. Please try again."))
+        send_html(
+          conn,
+          400,
+          error_page("state_expired", "OAuth session expired. Please try again.")
+        )
     end
   end
 
