@@ -49,7 +49,7 @@ defmodule BetterNotion.MCP.Controller do
     # In a real implementation, this would call the Notion API to fetch the page content.
     case File.read(Path.join(@fixtures_dir, page_id)) do
       {:ok, content} ->
-        create_meta_data(page_id, path, content)
+        create_metadata!(page_id, path, content)
         {:ok, content}
 
       {:error, reason} ->
@@ -61,11 +61,7 @@ defmodule BetterNotion.MCP.Controller do
     :code.priv_dir(:better_notion)
   end
 
-  def create_meta_data(page_id, path, content) do
-    # Git like path from page_id, e.g. 322a8f8de3be81f1b48dcbe820cfef17 -> 32/2a8f8de3be81f1b48dcbe820cfef17
-    subfolder = String.slice(page_id, 0..1)
-    filename = String.slice(page_id, 2..-1//1)
-
+  def create_metadata!(page_id, path, content) do
     metadata = %{
       page_id: page_id,
       path: path,
@@ -73,9 +69,22 @@ defmodule BetterNotion.MCP.Controller do
       content: content
     }
 
-    Path.join([metafolder(), subfolder])
-    |> tap(&File.mkdir_p!/1)
-    |> Path.join(filename)
-    |> File.write(Jason.encode!(metadata))
+    meta_path = file_metadata_path(path)
+    File.mkdir_p!(Path.dirname(meta_path))
+    File.write!(meta_path, Jason.encode!(metadata))
+  end
+
+  defp file_metadata_path(path) do
+    # Git like path from hash of path, e.g. 322a8f8de3be81f1b48dcbe820cfef17 -> 32/2a8f8de3be81f1b48dcbe820cfef17
+
+    hash = hash(path)
+    subfolder = String.slice(hash, 0..1)
+    filename = String.slice(hash, 2..-1//1)
+
+    Path.join([metafolder(), subfolder, filename])
+  end
+
+  defp hash(content) do
+    :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
   end
 end
