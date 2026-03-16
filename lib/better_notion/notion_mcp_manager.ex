@@ -40,6 +40,25 @@ defmodule BetterNotion.NotionMcpManager do
   end
 
   @doc """
+  Fetches a Notion document properties by calling the appropriate tool on the MCP server.
+  It returns the properties of the document as a JSON formatted string.
+  """
+  @spec fetch_properties(String.t()) :: {:ok, String.t()} | {:error, any()}
+  def fetch_properties(page_id) do
+    with {:ok, result} <- call_tool("notion-fetch", %{"id" => page_id}) do
+      text =
+        result["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!() |> Map.get("text")
+
+      Regex.scan(~r/<properties>(.*?)<\/properties>/s, text, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.join("\n")
+      |> then(&{:ok, &1})
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Updates a Notion document content by calling the appropriate tool on the MCP server.
   The `updates` argument is a list of maps with the following structure:
   ```

@@ -19,8 +19,13 @@ defmodule BetterNotion.Document do
     case diff(path) do
       {:ok, :no_conflict, new_content} ->
         case send_file_to_notion(path, new_content) do
-          :ok -> {:ok, :committed}
-          {:error, reason} -> {:error, reason}
+          :ok ->
+            File.rm!(path)
+            File.rm_rf!(file_metadata_path(path))
+            {:ok, :committed}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       {:ok, :conflict, diff} ->
