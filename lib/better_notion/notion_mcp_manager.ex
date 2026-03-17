@@ -1,4 +1,7 @@
 defmodule BetterNotion.NotionMcpManager do
+  import SweetXml, only: [sigil_x: 2]
+  alias BetterNotion.Document
+
   @moduledoc """
   Manages the lifecycle of a McpClient connected to Notion's MCP server.
 
@@ -27,10 +30,7 @@ defmodule BetterNotion.NotionMcpManager do
   @spec fetch_document(String.t()) :: {:ok, String.t()} | {:error, any()}
   def fetch_document(page_id) do
     with {:ok, result} <- call_tool("notion-fetch", %{"id" => page_id}) do
-      text =
-        result["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!() |> Map.get("text")
-
-      Regex.scan(~r/<content>(.*?)<\/content>/s, text, capture: :all_but_first)
+      Regex.scan(~r/<content>(.*?)<\/content>/s, fetch_text(result), capture: :all_but_first)
       |> List.flatten()
       |> Enum.join("\n")
       |> then(&{:ok, &1})
@@ -46,16 +46,106 @@ defmodule BetterNotion.NotionMcpManager do
   @spec fetch_properties(String.t()) :: {:ok, String.t()} | {:error, any()}
   def fetch_properties(page_id) do
     with {:ok, result} <- call_tool("notion-fetch", %{"id" => page_id}) do
-      text =
-        result["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!() |> Map.get("text")
-
-      Regex.scan(~r/<properties>(.*?)<\/properties>/s, text, capture: :all_but_first)
+      Regex.scan(~r/<properties>(.*?)<\/properties>/s, fetch_text(result),
+        capture: :all_but_first
+      )
       |> List.flatten()
       |> Enum.join("\n")
       |> then(&{:ok, &1})
     else
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  @doc """
+  Fetches entries from a Notion database view by its URL.
+
+  Returns the filtered results based on the view's display properties,
+  along with metadata about whether more results are available and which
+  fields were excluded.
+  """
+  @spec fetch_view_entries(String.t()) ::
+          {:ok,
+           %{
+             has_more: boolean(),
+             results: [map()],
+             other_fields: [String.t()],
+             view_info: map()
+           }}
+          | {:error, any()}
+  def fetch_view_entries(view_url) do
+    with {:ok, database_result} <-
+           call_tool("notion-fetch", %{"id" => Document.extract_page_id(view_url)}),
+         {:ok, view_results} <- call_tool("notion-query-database-view", %{"view_url" => view_url}),
+         {:ok, view_info} <- extract_view_info(database_result, view_url) do
+      filter_view_results(view_results, view_info)
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp extract_view_info(database_result, view_url) do
+    view_info =
+      Regex.scan(~r/<views>(.*?)<\/views>/s, fetch_text(database_result),
+        capture: :all_but_first
+      )
+      |> List.flatten()
+      |> Enum.join("\n")
+      |> then(&"<views>#{&1}</views>")
+      |> SweetXml.xpath(~x"//views/view"l,
+        url: ~x"./@url"s,
+        content: ~x"./text()"s |> SweetXml.transform_by(&Jason.decode!/1)
+      )
+      |> Enum.find(fn %{url: url} ->
+        # view URL ressemble {{view://318a8f8d-e3be-8012-bd22-000cae97f8a0}} so we want to regex scan first
+        view_id =
+          Regex.scan(~r/{{(.*?)}}/, url, capture: :all_but_first)
+          |> List.flatten()
+          |> List.first()
+          |> URI.parse()
+          |> Map.get(:host)
+          |> String.replace("-", "")
+
+        view_id == Document.extract_view_id(view_url)
+      end)
+
+    case view_info do
+      nil -> {:error, :view_not_found}
+      %{content: content} -> {:ok, content}
+    end
+  end
+
+  defp filter_view_results(view_results, view_info) do
+    %{"has_more" => has_more?, "results" => results} =
+      view_results["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!()
+
+    fields_to_send =
+      (view_info["displayProperties"] ++ List.wrap(view_info["timelineBy"]) ++ ["url"])
+      |> Enum.uniq()
+
+    other_fields =
+      results
+      |> List.first()
+      |> case do
+        nil -> []
+        entry -> Map.keys(entry)
+      end
+      |> Enum.filter(&(&1 not in fields_to_send))
+
+    results =
+      results
+      |> Enum.map(
+        &Map.filter(&1, fn {k, _v} ->
+          Enum.find(fields_to_send, fn field -> String.contains?(k, field) end) != nil
+        end)
+      )
+
+    {:ok,
+     %{has_more: has_more?, results: results, other_fields: other_fields, view_info: view_info}}
+  end
+
+  defp fetch_text(result) do
+    result["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!() |> Map.get("text")
   end
 
   @doc """

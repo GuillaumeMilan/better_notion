@@ -24,6 +24,19 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
+  def fetch_view_entries(_conn, %{"view_url" => view_url}) do
+    case BetterNotion.NotionMcpManager.fetch_view_entries(view_url) do
+      {:ok, %{has_more: has_more, results: results, other_fields: other_fields}} ->
+        response =
+          Jason.encode!(%{has_more: has_more, results: results, other_fields: other_fields})
+
+        {:ok, CallResult.new(content: [ToolContent.text(response)])}
+
+      {:error, reason} ->
+        {:error, "Failed to fetch view entries: #{inspect(reason)}"}
+    end
+  end
+
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
 

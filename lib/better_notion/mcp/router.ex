@@ -20,6 +20,19 @@ defmodule BetterNotion.MCP.Router do
     input_field("path", "Absolute path to the local document file", :string, required: true)
   end
 
+  tool "fetch_view_entries",
+       """
+       Fetches entries from a Notion database view.
+       Accepts a Notion view URL (containing a view ID query parameter).
+       Returns the filtered results based on the view's display properties.
+       """,
+       BetterNotion.MCP.Controller,
+       :fetch_view_entries,
+       read_only_hint: true,
+       idempotent_hint: true do
+    input_field("view_url", "Notion database view URL", :string, required: true)
+  end
+
   tool "fetch_document",
        """
        Fetches a Notion document and returns a path where the document has been saved.

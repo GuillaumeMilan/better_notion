@@ -51,6 +51,18 @@ defmodule BetterNotion.Document do
     end
   end
 
+  def extract_view_id(view_url) do
+    case URI.parse(view_url) do
+      %URI{query: query} when not is_nil(query) ->
+        query
+        |> URI.decode_query()
+        |> Map.get("v")
+
+      _ ->
+        nil
+    end
+  end
+
   @doc """
   Diffs the current content of the local document with the original content fetched from Notion,
   using the metadata to identify the original page and content.
