@@ -64,21 +64,21 @@ defmodule BetterNotion.NotionMcpManager do
   along with metadata about whether more results are available and which
   fields were excluded.
   """
-  @spec fetch_view_entries(String.t()) ::
+  @spec fetch_view_entries(String.t(), [String.t()]) ::
           {:ok,
            %{
              has_more: boolean(),
              results: [map()],
-             other_fields: [String.t()],
              view_info: map()
            }}
           | {:error, any()}
-  def fetch_view_entries(view_url) do
+  def fetch_view_entries(view_url, additional_fields \\ []) do
     with {:ok, database_result} <-
            call_tool("notion-fetch", %{"id" => Document.extract_page_id(view_url)}),
-         {:ok, view_results} <- call_tool("notion-query-database-view", %{"view_url" => view_url}),
+         {:ok, view_results} <-
+           call_tool("notion-query-database-view", %{"view_url" => view_url}),
          {:ok, view_info} <- extract_view_info(database_result, view_url) do
-      filter_view_results(view_results, view_info)
+      filter_view_results(view_results, view_info, additional_fields)
     else
       {:error, reason} -> {:error, reason}
     end
@@ -86,9 +86,7 @@ defmodule BetterNotion.NotionMcpManager do
 
   defp extract_view_info(database_result, view_url) do
     view_info =
-      Regex.scan(~r/<views>(.*?)<\/views>/s, fetch_text(database_result),
-        capture: :all_but_first
-      )
+      Regex.scan(~r/<views>(.*?)<\/views>/s, fetch_text(database_result), capture: :all_but_first)
       |> List.flatten()
       |> Enum.join("\n")
       |> then(&"<views>#{&1}</views>")
@@ -115,12 +113,13 @@ defmodule BetterNotion.NotionMcpManager do
     end
   end
 
-  defp filter_view_results(view_results, view_info) do
+  defp filter_view_results(view_results, view_info, additional_fields) do
     %{"has_more" => has_more?, "results" => results} =
       view_results["content"] |> Enum.at(0) |> Map.get("text") |> Jason.decode!()
 
     fields_to_send =
-      (view_info["displayProperties"] ++ List.wrap(view_info["timelineBy"]) ++ ["url"])
+      (view_info["displayProperties"] ++
+         List.wrap(view_info["timelineBy"]) ++ additional_fields ++ ["url"])
       |> Enum.uniq()
 
     other_fields =
@@ -239,7 +238,8 @@ defmodule BetterNotion.NotionMcpManager do
   def handle_call(request, from, %{mode: :stalled} = state)
       when request in [:list_tools, :list_resources] or
              (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) or
-             (is_tuple(request) and tuple_size(request) == 2 and elem(request, 0) == :read_resource) do
+             (is_tuple(request) and tuple_size(request) == 2 and
+                elem(request, 0) == :read_resource) do
     {:noreply, enqueue(state, from, request)}
   end
 
@@ -247,7 +247,8 @@ defmodule BetterNotion.NotionMcpManager do
   def handle_call(request, from, %{mode: :connected} = state)
       when request in [:list_tools, :list_resources] or
              (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) or
-             (is_tuple(request) and tuple_size(request) == 2 and elem(request, 0) == :read_resource) do
+             (is_tuple(request) and tuple_size(request) == 2 and
+                elem(request, 0) == :read_resource) do
     case forward_request(state.client, request) do
       {:error, {:auth_required, _}} ->
         new_state =

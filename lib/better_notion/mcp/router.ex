@@ -31,6 +31,16 @@ defmodule BetterNotion.MCP.Router do
        read_only_hint: true,
        idempotent_hint: true do
     input_field("view_url", "Notion database view URL", :string, required: true)
+
+    input_field(
+      "additional_fields",
+      """
+      Optional list of additional field names to include in the results beyond the view's default display properties.
+      Useful when you need extra data to perform your task. Use the `other_fields` from a previous response to know which fields are available.
+      """,
+      :array,
+      items: :string
+    )
   end
 
   tool "fetch_document",

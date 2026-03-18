@@ -24,8 +24,10 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
-  def fetch_view_entries(_conn, %{"view_url" => view_url}) do
-    case BetterNotion.NotionMcpManager.fetch_view_entries(view_url) do
+  def fetch_view_entries(_conn, %{"view_url" => view_url} = args) do
+    additional_fields = Map.get(args, "additional_fields", [])
+
+    case BetterNotion.NotionMcpManager.fetch_view_entries(view_url, additional_fields) do
       {:ok, %{has_more: has_more, results: results, other_fields: other_fields}} ->
         response =
           Jason.encode!(%{has_more: has_more, results: results, other_fields: other_fields})
