@@ -254,6 +254,22 @@ defmodule McpClient do
   end
 
   @doc """
+  List available resources from the MCP server.
+  """
+  @spec list_resources(GenServer.server(), timeout()) :: {:ok, any()} | {:error, any()}
+  def list_resources(client_pid, timeout \\ 30_000) do
+    GenServer.call(client_pid, :list_resources, timeout)
+  end
+
+  @doc """
+  Read a specific resource from the MCP server by URI.
+  """
+  @spec read_resource(GenServer.server(), String.t(), timeout()) :: {:ok, any()} | {:error, any()}
+  def read_resource(client_pid, uri, timeout \\ 30_000) when is_binary(uri) do
+    GenServer.call(client_pid, {:read_resource, uri}, timeout)
+  end
+
+  @doc """
   Get the current client status and connection state.
   """
   @spec status(GenServer.server()) :: {:ok, map()}
@@ -657,6 +673,12 @@ defmodule McpClient do
       when is_binary(name) and is_map(arguments),
       do: true
 
+  def is_valid_operation?(:list_resources), do: true
+
+  def is_valid_operation?({:read_resource, uri})
+      when is_binary(uri),
+      do: true
+
   def is_valid_operation?(_), do: false
 
   @spec build_operation_request(atom(), integer()) :: map()
@@ -666,6 +688,14 @@ defmodule McpClient do
 
   defp build_operation_request({:call_tool, name, arguments}, request_id) do
     build_request("tools/call", %{"name" => name, "arguments" => arguments}, request_id)
+  end
+
+  defp build_operation_request(:list_resources, request_id) do
+    build_request("resources/list", %{}, request_id)
+  end
+
+  defp build_operation_request({:read_resource, uri}, request_id) do
+    build_request("resources/read", %{"uri" => uri}, request_id)
   end
 
   @spec build_request(String.t(), map(), integer()) :: map()

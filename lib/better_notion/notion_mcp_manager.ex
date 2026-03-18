@@ -186,6 +186,18 @@ defmodule BetterNotion.NotionMcpManager do
     GenServer.call(__MODULE__, {:call_tool, name, args}, timeout)
   end
 
+  @doc "List available resources from the Notion MCP server."
+  @spec list_resources(timeout()) :: {:ok, any()} | {:error, any()}
+  def list_resources(timeout \\ 30_000) do
+    GenServer.call(__MODULE__, :list_resources, timeout)
+  end
+
+  @doc "Read a resource from the Notion MCP server by URI."
+  @spec read_resource(String.t(), timeout()) :: {:ok, any()} | {:error, any()}
+  def read_resource(uri, timeout \\ 30_000) do
+    GenServer.call(__MODULE__, {:read_resource, uri}, timeout)
+  end
+
   @doc "Returns the current manager status."
   @spec status() :: map()
   def status do
@@ -225,15 +237,17 @@ defmodule BetterNotion.NotionMcpManager do
 
   # Stalled: queue the request, caller blocks until auth + replay
   def handle_call(request, from, %{mode: :stalled} = state)
-      when request == :list_tools or
-             (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) do
+      when request in [:list_tools, :list_resources] or
+             (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) or
+             (is_tuple(request) and tuple_size(request) == 2 and elem(request, 0) == :read_resource) do
     {:noreply, enqueue(state, from, request)}
   end
 
   # Connected: forward to McpClient
   def handle_call(request, from, %{mode: :connected} = state)
-      when request == :list_tools or
-             (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) do
+      when request in [:list_tools, :list_resources] or
+             (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) or
+             (is_tuple(request) and tuple_size(request) == 2 and elem(request, 0) == :read_resource) do
     case forward_request(state.client, request) do
       {:error, {:auth_required, _}} ->
         new_state =
@@ -299,6 +313,8 @@ defmodule BetterNotion.NotionMcpManager do
     case request do
       :list_tools -> McpClient.list_tools(client)
       {:call_tool, name, args} -> McpClient.call_tool(client, name, args)
+      :list_resources -> McpClient.list_resources(client)
+      {:read_resource, uri} -> McpClient.read_resource(client, uri)
     end
   catch
     :exit, reason ->
