@@ -169,6 +169,49 @@ defmodule BetterNotion.NotionMcpManager do
     call_tool("notion-update-page", args)
   end
 
+  @doc """
+  Updates properties on a Notion page.
+
+  The `properties` argument is a map of property names to SQLite values
+  (string, number, or null). Property names must match the exact names
+  from the page's data source schema.
+
+  Special property formats:
+  - Date properties: use "date:{property}:start", "date:{property}:end", "date:{property}:is_datetime"
+  - Checkbox properties: use "__YES__" / "__NO__"
+  - Number properties: use plain numbers (not strings)
+  - Properties named "id" or "url": prefix with "userDefined:"
+
+  ## Examples
+
+      # Update a select property
+      update_properties(page_id, %{"Status*" => "In Progress"})
+
+      # Update a date property
+      update_properties(page_id, %{
+        "date:Done at:start" => "2026-03-18",
+        "date:Done at:is_datetime" => 0
+      })
+  """
+  @spec update_properties(String.t(), map()) :: {:ok, any()} | {:error, any()}
+  def update_properties(page_id, properties) when is_map(properties) do
+    args = %{
+      "page_id" => page_id,
+      "command" => "update_properties",
+      "properties" => properties
+    }
+
+    with {:ok, result} <- call_tool("notion-update-page", args) do
+      case result do
+        %{"isError" => true, "content" => [%{"text" => text} | _]} ->
+          {:error, text}
+
+        _ ->
+          {:ok, result}
+      end
+    end
+  end
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end

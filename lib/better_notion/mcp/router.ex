@@ -43,6 +43,27 @@ defmodule BetterNotion.MCP.Router do
     )
   end
 
+  tool "update_properties",
+       """
+       Updates properties on a Notion page.
+       Accepts a Notion page URL or ID and a map of property names to values.
+       Property values must be SQLite-compatible types: strings, numbers, or null.
+       Use exact property names from the page's data source schema.
+       Special formats: date properties use "date:{name}:start"/"date:{name}:is_datetime",
+       checkboxes use "__YES__"/"__NO__", and properties named "id"/"url" need "userDefined:" prefix.
+       """,
+       BetterNotion.MCP.Controller,
+       :update_properties do
+    input_field("page", "Notion page URL or page UUID", :string, required: true)
+
+    input_field(
+      "properties",
+      "Map of property names to values (string, number, or null)",
+      :object,
+      required: true
+    )
+  end
+
   tool "fetch_document",
        """
        Fetches a Notion document and returns a path where the document has been saved.

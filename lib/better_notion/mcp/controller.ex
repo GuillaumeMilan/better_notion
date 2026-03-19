@@ -39,6 +39,18 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
+  def update_properties(_conn, %{"page" => page, "properties" => properties}) do
+    page_id = Document.extract_page_id(page)
+
+    case BetterNotion.NotionMcpManager.update_properties(page_id, properties) do
+      {:ok, _result} ->
+        {:ok, CallResult.new(content: [ToolContent.text("Properties updated successfully")])}
+
+      {:error, reason} ->
+        {:error, "Failed to update properties: #{inspect(reason)}"}
+    end
+  end
+
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
 
