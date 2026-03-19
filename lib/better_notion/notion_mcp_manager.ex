@@ -51,7 +51,7 @@ defmodule BetterNotion.NotionMcpManager do
       )
       |> List.flatten()
       |> Enum.join("\n")
-      |> then(&{:ok, &1})
+      |> Jason.decode()
     else
       {:error, reason} -> {:error, reason}
     end
