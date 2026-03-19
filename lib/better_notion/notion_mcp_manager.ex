@@ -69,7 +69,8 @@ defmodule BetterNotion.NotionMcpManager do
            %{
              has_more: boolean(),
              results: [map()],
-             view_info: map()
+             view_info: map(),
+             other_fields: [String.t()]
            }}
           | {:error, any()}
   def fetch_view_entries(view_url, additional_fields \\ []) do
