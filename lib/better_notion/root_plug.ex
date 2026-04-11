@@ -13,10 +13,15 @@ defmodule BetterNotion.RootPlug do
   def init(opts) do
     mcp_opts = McpServer.HttpPlug.init(opts)
     oauth_opts = BetterNotion.OAuthCallbackPlug.init([])
-    %{mcp_opts: mcp_opts, oauth_opts: oauth_opts}
+    api_opts = BetterNotion.ApiPlug.init([])
+    %{mcp_opts: mcp_opts, oauth_opts: oauth_opts, api_opts: api_opts}
   end
 
   @impl true
+  def call(%Plug.Conn{request_path: "/api" <> _} = conn, %{api_opts: api_opts}) do
+    BetterNotion.ApiPlug.call(conn, api_opts)
+  end
+
   def call(%Plug.Conn{request_path: "/oauth" <> _} = conn, %{oauth_opts: oauth_opts}) do
     BetterNotion.OAuthCallbackPlug.call(conn, oauth_opts)
   end

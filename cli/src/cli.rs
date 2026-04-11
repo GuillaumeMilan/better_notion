@@ -1,0 +1,71 @@
+use clap::{Parser, Subcommand};
+use clap_complete::Shell;
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "better-notion",
+    author,
+    version,
+    about = "CLI for the Better Notion MCP server"
+)]
+pub struct Cli {
+    /// MCP server URL
+    #[arg(long, env = "BETTER_NOTION_URL", default_value = "http://localhost:4000")]
+    pub server_url: String,
+
+    /// Enable verbose output
+    #[arg(long, short)]
+    pub verbose: bool,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Ping the MCP server
+    Ping,
+
+    /// Fetch a Notion document and save as markdown
+    FetchDocument {
+        /// Notion page URL or UUID
+        page: String,
+
+        /// Absolute path to save the document
+        #[arg(long, short)]
+        path: Option<String>,
+    },
+
+    /// Commit local document changes back to Notion
+    CommitDocument {
+        /// Absolute path to the local document file
+        path: String,
+    },
+
+    /// Fetch entries from a Notion database view
+    FetchViewEntries {
+        /// Notion database view URL
+        view_url: String,
+
+        /// Additional fields to include (comma-separated)
+        #[arg(long, short, value_delimiter = ',')]
+        additional_fields: Option<Vec<String>>,
+    },
+
+    /// Update properties on a Notion page
+    UpdateProperties {
+        /// Notion page URL or UUID
+        page: String,
+
+        /// Properties as a JSON string, e.g. '{"Status": "Done"}'
+        #[arg(long, short)]
+        properties: String,
+    },
+
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
