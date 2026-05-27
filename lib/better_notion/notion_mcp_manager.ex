@@ -327,7 +327,7 @@ defmodule BetterNotion.NotionMcpManager do
       {:error, reason} ->
         Logger.error("Authentication failed: #{inspect(reason)}")
         state = flush_queue(state, {:error, :not_authenticated})
-        {:noreply, %{state | auth_ref: nil}}
+        {:noreply, start_auth(%{state | auth_ref: nil})}
     end
   end
 
@@ -367,10 +367,19 @@ defmodule BetterNotion.NotionMcpManager do
   end
 
   defp try_connect(state) do
-    case McpClient.start_link(
-           transport: {McpClient.Transport.Http, [url: @notion_mcp_url]},
-           client_id: "BetterNotion"
-         ) do
+    result =
+      try do
+        McpClient.start_link(
+          transport: {McpClient.Transport.Http, [url: @notion_mcp_url]},
+          client_id: "BetterNotion"
+        )
+      catch
+        :exit, reason -> {:error, {:client_exit, reason}}
+      rescue
+        e -> {:error, {:client_exception, e}}
+      end
+
+    case result do
       {:ok, client} ->
         monitor_ref = Process.monitor(client)
 

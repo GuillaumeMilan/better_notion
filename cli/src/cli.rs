@@ -32,7 +32,6 @@ pub enum Commands {
         page: String,
 
         /// Absolute path to save the document
-        #[arg(long, short)]
         path: Option<String>,
     },
 
