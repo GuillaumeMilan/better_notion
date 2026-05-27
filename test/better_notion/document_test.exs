@@ -111,6 +111,41 @@ defmodule BetterNotion.DocumentTest do
              ]
     end
 
+    test "new_str of an earlier chunk does not pollute old_str matching of a later chunk" do
+      # Chunk 1 replaces "section_a" with new content that includes "shared_pattern".
+      # Chunk 2 replaces "shared_pattern" further down in the original.
+      # Without position-aware search, chunk 2 would accidentally target the copy
+      # introduced by chunk 1 instead of the original occurrence.
+      server = "section_a\nshared_pattern\nold_value\nshared_pattern\nother"
+      updated = "new_content\nshared_pattern\nnew_value\nshared_pattern\nother"
+
+      result = BetterNotion.Document.compute_updates(server, updated)
+
+      # Simulate sequential application and verify the result matches `updated`
+      final =
+        Enum.reduce(result, server, fn %{old_str: old, new_str: new}, content ->
+          String.replace(content, old, new, global: false)
+        end)
+
+      assert final == updated
+    end
+
+    test "new_str introducing exact duplicate of a later old_str: sequential apply produces correct result" do
+      # chunk 1: replaces "AAA" with "BBB\nTARGET\nCCC" — now "TARGET" appears twice
+      # chunk 2: replaces "TARGET" (the original one) with "DONE"
+      server = "AAA\nTARGET\nZZZ"
+      updated = "BBB\nTARGET\nCCC\nDONE\nZZZ"
+
+      result = BetterNotion.Document.compute_updates(server, updated)
+
+      final =
+        Enum.reduce(result, server, fn %{old_str: old, new_str: new}, content ->
+          String.replace(content, old, new, global: false)
+        end)
+
+      assert final == updated
+    end
+
     test "expands context only as much as needed" do
       server = "a\nb\nrepeat\nrepeat\nc\nd"
       updated = "a\nb\nrepeat\nCHANGED\nc\nd"

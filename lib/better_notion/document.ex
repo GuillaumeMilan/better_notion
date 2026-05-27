@@ -211,15 +211,20 @@ defmodule BetterNotion.Document do
   # unique within the server content. Starts with 1 line of context and
   # expands until unique or all available context is used.
   # When a chunk can't be made unique with its available context, it gets
-  # merged with the next chunk (absorbing the shared eq segment).
+  # merged with an adjacent chunk (absorbing the shared eq segment).
   #
-  # Uniqueness is checked against the document state at the point each chunk
-  # will be applied — i.e. after all preceding chunks have been applied — so
-  # that a new_str that introduces a duplicate pattern does not break the
-  # old_str of a later chunk.
+  # Two merge passes are run:
+  #   1. merge_until_unique — handles patterns that appear multiple times in the
+  #      original document by merging adjacent chunks.
+  #   2. merge_until_unique_sequential — handles the case where a chunk's new_str
+  #      introduces a copy of a pattern that a later chunk's old_str must match.
+  #      Uniqueness is checked against the document state at the point each chunk
+  #      will be applied (i.e. after all preceding chunks have been applied), so
+  #      that a new_str-introduced duplicate cannot confuse a later chunk.
   defp ensure_unique_context(raw_changes, server_content) do
     raw_changes
     |> merge_until_unique(server_content)
+    |> merge_until_unique_sequential(server_content)
     |> expand_context_sequentially(server_content)
   end
 
@@ -241,7 +246,7 @@ defmodule BetterNotion.Document do
   end
 
   # Iteratively merges adjacent raw changes when a chunk cannot be made
-  # unique with its available context alone.
+  # unique with all its available context in the original document.
   defp merge_until_unique(raw_changes, server_content) do
     case try_merge_pass(raw_changes, server_content) do
       {:unchanged, result} -> result
@@ -275,7 +280,63 @@ defmodule BetterNotion.Document do
     not unique_in?(old_str, server_content)
   end
 
-  defp expand_context(prev_eq, change_old, change_new, next_eq, server_content, n) do
+  # Iteratively merges chunk N with chunk N-1 when chunk N's max-context old_str
+  # would not be unique in the document state after applying chunks 1..N-1.
+  # This handles the case where an earlier chunk's new_str introduces a copy of
+  # a pattern that a later chunk's old_str needs to find uniquely.
+  defp merge_until_unique_sequential(raw_changes, initial_content) do
+    case find_sequential_conflict(raw_changes, initial_content) do
+      :ok ->
+        raw_changes
+
+      {:conflict_at, i} ->
+        raw_changes
+        |> merge_adjacent_at(i)
+        |> merge_until_unique_sequential(initial_content)
+    end
+  end
+
+  # Simulates sequential application using max-context old_str for each chunk.
+  # Returns {:conflict_at, i} for the first chunk whose max-context old_str is
+  # not unique in the document at the time it would be applied.
+  defp find_sequential_conflict(raw_changes, initial_content) do
+    result =
+      Enum.reduce_while(
+        Enum.with_index(raw_changes),
+        initial_content,
+        fn {{prev_eq, old, _new, next_eq} = chunk, i}, content ->
+          max_old_str = Enum.join(prev_eq ++ old ++ next_eq, "\n")
+
+          if max_old_str == "" or unique_in?(max_old_str, content) do
+            {:cont, apply_chunk_max_context(chunk, content)}
+          else
+            {:halt, {:conflict_at, i}}
+          end
+        end
+      )
+
+    case result do
+      content when is_binary(content) -> :ok
+      conflict -> conflict
+    end
+  end
+
+  defp apply_chunk_max_context({prev_eq, old, new, next_eq}, content) do
+    old_str = Enum.join(prev_eq ++ old ++ next_eq, "\n")
+    new_str = Enum.join(prev_eq ++ new ++ next_eq, "\n")
+    String.replace(content, old_str, new_str)
+  end
+
+  # Merges the chunk at index i with the chunk at index i-1.
+  defp merge_adjacent_at(raw_changes, i) when i > 0 do
+    {before, [chunk_prev, chunk_curr | rest]} = Enum.split(raw_changes, i - 1)
+    {prev_eq, old1, new1, shared_eq} = chunk_prev
+    {_prev_eq2, old2, new2, next_eq2} = chunk_curr
+    merged = {prev_eq, old1 ++ shared_eq ++ old2, new1 ++ shared_eq ++ new2, next_eq2}
+    before ++ [merged | rest]
+  end
+
+  defp expand_context(prev_eq, change_old, change_new, next_eq, current_content, n) do
     ctx_before = last_n(prev_eq, n)
     ctx_after = first_n(next_eq, n)
 
@@ -285,11 +346,11 @@ defmodule BetterNotion.Document do
     max_context_reached =
       length(ctx_before) >= length(prev_eq) and length(ctx_after) >= length(next_eq)
 
-    if max_context_reached or unique_in?(old_str, server_content) do
+    if max_context_reached or unique_in?(old_str, current_content) do
       new_lines = ctx_before ++ change_new ++ ctx_after
       {old_lines, new_lines}
     else
-      expand_context(prev_eq, change_old, change_new, next_eq, server_content, n + 1)
+      expand_context(prev_eq, change_old, change_new, next_eq, current_content, n + 1)
     end
   end
 
