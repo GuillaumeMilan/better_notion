@@ -212,12 +212,32 @@ defmodule BetterNotion.Document do
   # expands until unique or all available context is used.
   # When a chunk can't be made unique with its available context, it gets
   # merged with the next chunk (absorbing the shared eq segment).
+  #
+  # Uniqueness is checked against the document state at the point each chunk
+  # will be applied — i.e. after all preceding chunks have been applied — so
+  # that a new_str that introduces a duplicate pattern does not break the
+  # old_str of a later chunk.
   defp ensure_unique_context(raw_changes, server_content) do
     raw_changes
     |> merge_until_unique(server_content)
-    |> Enum.map(fn {prev_eq, change_old, change_new, next_eq} ->
-      expand_context(prev_eq, change_old, change_new, next_eq, server_content, _n = 1)
-    end)
+    |> expand_context_sequentially(server_content)
+  end
+
+  defp expand_context_sequentially(raw_changes, initial_content) do
+    {result, _} =
+      Enum.reduce(raw_changes, {[], initial_content}, fn
+        {prev_eq, change_old, change_new, next_eq}, {acc, current_content} ->
+          {old_lines, new_lines} =
+            expand_context(prev_eq, change_old, change_new, next_eq, current_content, 1)
+
+          old_str = Enum.join(old_lines, "\n")
+          new_str = Enum.join(new_lines, "\n")
+          next_content = String.replace(current_content, old_str, new_str)
+
+          {[{old_lines, new_lines} | acc], next_content}
+      end)
+
+    Enum.reverse(result)
   end
 
   # Iteratively merges adjacent raw changes when a chunk cannot be made
