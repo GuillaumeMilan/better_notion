@@ -10,9 +10,9 @@ defmodule BetterNotion.ApiPlug do
 
   alias BetterNotion.MCP.Controller
 
-  plug :match
-  plug Plug.Parsers, parsers: [:json], json_decoder: Jason
-  plug :dispatch
+  plug(:match)
+  plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
+  plug(:dispatch)
 
   post "/api/ping" do
     handle_tool(conn, &Controller.ping/2, conn.body_params)

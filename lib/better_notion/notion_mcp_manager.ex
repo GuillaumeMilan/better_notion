@@ -381,10 +381,10 @@ defmodule BetterNotion.NotionMcpManager do
           transport: {McpClient.Transport.Http, [url: @notion_mcp_url]},
           client_id: "BetterNotion"
         )
-      catch
-        :exit, reason -> {:error, {:client_exit, reason}}
       rescue
         e -> {:error, {:client_exception, e}}
+      catch
+        :exit, reason -> {:error, {:client_exit, reason}}
       end
 
     case result do
