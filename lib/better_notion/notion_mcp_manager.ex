@@ -167,7 +167,15 @@ defmodule BetterNotion.NotionMcpManager do
       "content_updates" => updates
     }
 
-    call_tool("notion-update-page", args)
+    with {:ok, result} <- call_tool("notion-update-page", args) do
+      case result do
+        %{"isError" => true, "content" => [%{"text" => text} | _]} ->
+          {:error, text}
+
+        _ ->
+          {:ok, result}
+      end
+    end
   end
 
   @doc """
