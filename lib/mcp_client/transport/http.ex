@@ -188,6 +188,10 @@ defmodule McpClient.Transport.Http do
   def handle_message({:hackney_response, ref, data}, state) when is_binary(data) do
     Logger.debug("Received data: #{byte_size(data)} bytes")
 
+    Logger.debug(
+      "Received raw data content: #{inspect(data, limit: :infinity, printable_limit: :infinity)}"
+    )
+
     with %{status: :streaming_response} <- state.connections[ref] do
       {:ok, handle_connection_data(state, ref, data)}
     else
@@ -378,8 +382,13 @@ defmodule McpClient.Transport.Http do
   defp emit_response(state, ref) do
     connection_state = state.connections[ref]
 
+    Logger.debug(
+      "Connection closed (:done), emitting response. type=#{inspect(connection_state.type)} " <>
+        "status=#{inspect(connection_state.status)} buffer_size=#{byte_size(connection_state.buffer)}"
+    )
+
     case connection_state.type do
-      :see ->
+      :sse ->
         close_connection(state, ref)
 
       _ ->
@@ -449,14 +458,29 @@ defmodule McpClient.Transport.Http do
     end
   end
 
-  defp process_sse_event(%{data: data}) do
+  defp process_sse_event(%{data: data} = event) do
+    Logger.debug(
+      "Processing SSE event: #{inspect(event, limit: :infinity, printable_limit: :infinity)}"
+    )
+
     case Jason.decode(data) do
-      {:ok, message} -> {:ok, message}
-      {:error, _reason} -> :error
+      {:ok, message} ->
+        Logger.debug("Decoded SSE message: #{inspect(message, limit: :infinity)}")
+        {:ok, message}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to JSON-decode SSE data: #{inspect(reason)} | raw data: #{inspect(data)}"
+        )
+
+        :error
     end
   end
 
-  defp process_sse_event(_), do: :error
+  defp process_sse_event(event) do
+    Logger.warning("SSE event has no :data field: #{inspect(event)}")
+    :error
+  end
 
   defp get_content_type(headers) do
     headers
