@@ -1,6 +1,7 @@
 defmodule BetterNotion.NotionMcpManager do
   import SweetXml, only: [sigil_x: 2]
   alias BetterNotion.Document
+  alias BetterNotion.FilterSolver
 
   @moduledoc """
   Manages the lifecycle of a McpClient connected to Notion's MCP server.
@@ -142,6 +143,133 @@ defmodule BetterNotion.NotionMcpManager do
 
     {:ok,
      %{has_more: has_more?, results: results, other_fields: other_fields, view_info: view_info}}
+  end
+
+  @doc """
+  Resolves a view URL to the context needed to create a page that lands in it.
+
+  Returns the view's data source id, the data source `schema`, the view's
+  `simpleFilters`, and the name of the title property.
+
+  Note: the data source id is taken from the view config's `dataSourceUrl`,
+  and the schema is fetched with a *separate* `notion-fetch` on that id — a
+  fetch of the database page may surface a different embedded data source.
+  """
+  @spec get_view_context(String.t()) ::
+          {:ok,
+           %{
+             data_source_id: String.t(),
+             schema: map(),
+             filters: [map()],
+             title_property: String.t()
+           }}
+          | {:error, any()}
+  def get_view_context(view_url) do
+    with {:ok, database_result} <-
+           call_tool("notion-fetch", %{"id" => Document.extract_page_id(view_url)}),
+         {:ok, view_info} <- extract_view_info(database_result, view_url),
+         {:ok, data_source_id} <- data_source_id_from_view(view_info),
+         {:ok, ds_result} <- call_tool("notion-fetch", %{"id" => data_source_id}),
+         {:ok, schema} <- extract_data_source_schema(ds_result),
+         {:ok, title_property} <- find_title_property(schema) do
+      {:ok,
+       %{
+         data_source_id: data_source_id,
+         schema: schema,
+         filters: view_info["simpleFilters"] || [],
+         title_property: title_property
+       }}
+    end
+  end
+
+  @doc """
+  Creates a page in a view's data source whose properties satisfy the view's
+  filters, so the page appears in the view.
+
+  Filters that cannot be auto-satisfied are skipped and returned in `warnings`;
+  the page is still created. The title is written to the data source's title
+  property (its name varies per data source).
+  """
+  @spec create_page_on_view(String.t(), String.t()) ::
+          {:ok, %{page_id: String.t(), url: String.t(), warnings: [String.t()]}}
+          | {:error, any()}
+  def create_page_on_view(view_url, title \\ "New page") do
+    with {:ok, ctx} <- get_view_context(view_url),
+         {properties, warnings} <- FilterSolver.solve(ctx.filters, ctx.schema),
+         properties = Map.put(properties, ctx.title_property, title),
+         {:ok, %{page_id: page_id, url: url}} <- create_page(ctx.data_source_id, properties) do
+      {:ok, %{page_id: page_id, url: url, warnings: warnings}}
+    end
+  end
+
+  @doc """
+  Creates a single page under a data source with the given flat property map.
+  """
+  @spec create_page(String.t(), map()) ::
+          {:ok, %{page_id: String.t(), url: String.t()}} | {:error, any()}
+  def create_page(data_source_id, properties) when is_map(properties) do
+    args = %{
+      "parent" => %{"type" => "data_source_id", "data_source_id" => data_source_id},
+      "pages" => [%{"properties" => properties}]
+    }
+
+    with {:ok, result} <- call_tool("notion-create-pages", args) do
+      case result do
+        %{"isError" => true, "content" => [%{"text" => text} | _]} ->
+          {:error, text}
+
+        _ ->
+          parse_created_page(result)
+      end
+    end
+  end
+
+  defp data_source_id_from_view(view_info) do
+    case view_info["dataSourceUrl"] do
+      url when is_binary(url) ->
+        id =
+          Regex.scan(~r/{{(.*?)}}/, url, capture: :all_but_first)
+          |> List.flatten()
+          |> List.first()
+          |> case do
+            nil -> nil
+            token -> token |> URI.parse() |> Map.get(:host)
+          end
+
+        if id, do: {:ok, id}, else: {:error, :data_source_url_invalid}
+
+      _ ->
+        {:error, :data_source_url_missing}
+    end
+  end
+
+  defp extract_data_source_schema(ds_result) do
+    case Regex.run(~r/<data-source-state>\n(.*?)\n<\/data-source-state>/s, fetch_text(ds_result)) do
+      [_, json] ->
+        case Jason.decode(json) do
+          {:ok, %{"schema" => schema}} when is_map(schema) -> {:ok, schema}
+          _ -> {:error, :schema_not_found}
+        end
+
+      _ ->
+        {:error, :schema_not_found}
+    end
+  end
+
+  defp find_title_property(schema) do
+    case Enum.find(schema, fn {_name, prop} -> prop["type"] == "title" end) do
+      {name, _prop} -> {:ok, name}
+      nil -> {:error, :title_property_not_found}
+    end
+  end
+
+  defp parse_created_page(result) do
+    with text when is_binary(text) <- get_in(result, ["content", Access.at(0), "text"]),
+         {:ok, %{"pages" => [%{"id" => id, "url" => url} | _]}} <- Jason.decode(text) do
+      {:ok, %{page_id: id, url: url}}
+    else
+      _ -> {:error, {:unexpected_create_response, result}}
+    end
   end
 
   defp fetch_text(result) do

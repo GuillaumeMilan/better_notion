@@ -51,6 +51,19 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
+  def create_page_on_view(_conn, %{"view_url" => view_url} = args) do
+    title = Map.get(args, "title", "New page")
+
+    case BetterNotion.NotionMcpManager.create_page_on_view(view_url, title) do
+      {:ok, %{page_id: page_id, url: url, warnings: warnings}} ->
+        response = Jason.encode!(%{page_id: page_id, url: url, warnings: warnings})
+        {:ok, CallResult.new(content: [ToolContent.text(response)])}
+
+      {:error, reason} ->
+        {:error, "Failed to create page on view: #{inspect(reason)}"}
+    end
+  end
+
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
 

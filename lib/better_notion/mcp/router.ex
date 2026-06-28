@@ -64,6 +64,22 @@ defmodule BetterNotion.MCP.Router do
     )
   end
 
+  tool "create_page_on_view",
+       """
+       Creates a page in a Notion database view's data source, setting property
+       values so the page satisfies the view's filters and appears in the view.
+       Accepts a Notion view URL and an optional title (default "New page").
+       Filters that cannot be auto-satisfied (e.g. person filters, relative
+       relations, is_not_empty) are skipped and listed in the returned
+       `warnings`. Returns the new page id, url, and warnings as JSON.
+       EXPERIMENTAL: filter coverage is best-effort.
+       """,
+       BetterNotion.MCP.Controller,
+       :create_page_on_view do
+    input_field("view_url", "Notion database view URL", :string, required: true)
+    input_field("title", "Title for the new page (default \"New page\")", :string)
+  end
+
   tool "fetch_document",
        """
        Fetches a Notion document and returns a path where the document has been saved.
