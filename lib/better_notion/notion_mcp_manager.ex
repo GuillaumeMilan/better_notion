@@ -41,20 +41,46 @@ defmodule BetterNotion.NotionMcpManager do
   end
 
   @doc """
-  Fetches a Notion document properties by calling the appropriate tool on the MCP server.
-  It returns the properties of the document as a JSON formatted string.
+  Fetches a Notion page's properties, including its page-level icon.
+
+  Returns the properties as a map. When the page has an icon, it is merged into
+  the map under the `"icon"` key — an emoji character (e.g. "🚀") or an external
+  image URL, mirroring what `update_properties/3` accepts.
+
+  Note: Notion's fetch does not expose the page cover, so cover is never
+  included even when one is set.
   """
-  @spec fetch_properties(String.t()) :: {:ok, String.t()} | {:error, any()}
+  @spec fetch_properties(String.t()) :: {:ok, map()} | {:error, any()}
   def fetch_properties(page_id) do
     with {:ok, result} <- call_tool("notion-fetch", %{"id" => page_id}) do
-      Regex.scan(~r/<properties>(.*?)<\/properties>/s, fetch_text(result),
-        capture: :all_but_first
-      )
-      |> List.flatten()
-      |> Enum.join("\n")
-      |> Jason.decode()
-    else
-      {:error, reason} -> {:error, reason}
+      text = fetch_text(result)
+
+      with {:ok, properties} <-
+             Regex.scan(~r/<properties>(.*?)<\/properties>/s, text, capture: :all_but_first)
+             |> List.flatten()
+             |> Enum.join("\n")
+             |> Jason.decode() do
+        {:ok, put_page_icon(properties, text)}
+      end
+    end
+  end
+
+  defp put_page_icon(properties, text) do
+    case extract_page_icon(text) do
+      nil -> properties
+      icon -> Map.put(properties, "icon", icon)
+    end
+  end
+
+  @doc false
+  # Extracts the page-level `icon` attribute from the opening `<page …>` tag of a
+  # notion-fetch response. Notion exposes the icon as an attribute on the page
+  # element, outside the `<properties>` block. Returns nil when there is none.
+  @spec extract_page_icon(String.t()) :: String.t() | nil
+  def extract_page_icon(text) do
+    case Regex.run(~r/<page[^>]*\sicon="([^"]*)"/, text, capture: :all_but_first) do
+      [icon] -> icon
+      _ -> nil
     end
   end
 
