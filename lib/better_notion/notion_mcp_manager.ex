@@ -307,6 +307,34 @@ defmodule BetterNotion.NotionMcpManager do
   end
 
   @doc """
+  Appends markdown `content` to the end of a Notion page.
+
+  Uses the `notion-update-page` tool's `insert_content` command. This is the
+  correct path when the page has no existing content to search-and-replace
+  against: `update_content` matches `old_str` against the current page body, so
+  an empty page (empty `old_str`) silently matches nothing and writes nothing.
+  """
+  @spec append_to_page(String.t(), String.t()) :: {:ok, any()} | {:error, any()}
+  def append_to_page(page_id, content) do
+    args = %{
+      "page_id" => page_id,
+      "command" => "insert_content",
+      "content" => content,
+      "position" => %{"type" => "end"}
+    }
+
+    with {:ok, result} <- call_tool("notion-update-page", args) do
+      case result do
+        %{"isError" => true, "content" => [%{"text" => text} | _]} ->
+          {:error, text}
+
+        _ ->
+          {:ok, result}
+      end
+    end
+  end
+
+  @doc """
   Updates properties on a Notion page.
 
   The `properties` argument is a map of property names to SQLite values
