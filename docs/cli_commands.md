@@ -154,6 +154,34 @@ better-notion fetch-view-entries <VIEW_URL> [--additional-fields <FIELDS>]
 
 ---
 
+## fetch-properties
+
+Fetch a Notion page's properties (including its icon) as JSON.
+
+**Usage:**
+
+```
+better-notion fetch-properties <PAGE>
+```
+
+**Parameters:**
+
+| Name | Required | Description |
+|---|---|---|
+| `PAGE` | Yes | Notion page URL or page UUID |
+
+**Output:** JSON object of the page's property values. When the page has an icon, it is included under the `icon` key (an emoji character or an image URL). The cover is not returned — Notion's fetch does not expose it.
+
+```json
+{
+  "Status*": "IN PROGRESS",
+  "Ticket name": "TEST",
+  "icon": "✨"
+}
+```
+
+---
+
 ## update-properties
 
 Update properties, icon, and/or cover on a Notion page. At least one of `--properties`, `--icon`, or `--cover` must be provided.

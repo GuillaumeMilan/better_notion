@@ -3,6 +3,35 @@ defmodule BetterNotion.NotionMcpManagerTest do
 
   alias BetterNotion.NotionMcpManager
 
+  describe "extract_page_icon/1" do
+    test "extracts an emoji icon from the page tag" do
+      text =
+        ~s(<page url="https://app.notion.com/p/abc" icon="🚀">\n<properties>\n{}\n</properties>\n</page>)
+
+      assert NotionMcpManager.extract_page_icon(text) == "🚀"
+    end
+
+    test "extracts an image-URL icon from the page tag" do
+      url = "https://example.com/icon.png"
+      text = ~s(<page url="https://app.notion.com/p/abc" icon="#{url}">\n</page>)
+
+      assert NotionMcpManager.extract_page_icon(text) == url
+    end
+
+    test "returns nil when the page has no icon" do
+      text =
+        ~s(<page url="https://app.notion.com/p/abc">\n<properties>\n{}\n</properties>\n</page>)
+
+      assert NotionMcpManager.extract_page_icon(text) == nil
+    end
+
+    test "does not match an attribute that merely ends in 'icon'" do
+      text = ~s(<page url="https://app.notion.com/p/abc" myicon="nope">\n</page>)
+
+      assert NotionMcpManager.extract_page_icon(text) == nil
+    end
+  end
+
   describe "update_page_args/3" do
     test "builds a bare update_properties call when no icon/cover given" do
       assert NotionMcpManager.update_page_args("abc", %{"Status*" => "Done"}, []) ==
