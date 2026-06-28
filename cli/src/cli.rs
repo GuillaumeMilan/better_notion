@@ -51,14 +51,22 @@ pub enum Commands {
         additional_fields: Option<Vec<String>>,
     },
 
-    /// Update properties on a Notion page
+    /// Update properties, icon, and/or cover on a Notion page
     UpdateProperties {
         /// Notion page URL or UUID
         page: String,
 
         /// Properties as a JSON string, e.g. '{"Status": "Done"}'
         #[arg(long, short)]
-        properties: String,
+        properties: Option<String>,
+
+        /// Page icon: an emoji (e.g. "🚀"), a custom emoji name (e.g. ":rocket:"), or an image URL. Use "none" to remove.
+        #[arg(long, short)]
+        icon: Option<String>,
+
+        /// Page cover: an external image URL. Use "none" to remove.
+        #[arg(long, short)]
+        cover: Option<String>,
     },
 
     /// [EXPERIMENTAL] Create a page in a view that matches the view's filters

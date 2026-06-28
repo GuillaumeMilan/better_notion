@@ -21,9 +21,18 @@ fn main() {
             view_url,
             additional_fields,
         } => commands::fetch_view_entries::run(&client, &view_url, additional_fields),
-        Commands::UpdateProperties { page, properties } => {
-            commands::update_properties::run(&client, &page, &properties)
-        }
+        Commands::UpdateProperties {
+            page,
+            properties,
+            icon,
+            cover,
+        } => commands::update_properties::run(
+            &client,
+            &page,
+            properties.as_deref(),
+            icon.as_deref(),
+            cover.as_deref(),
+        ),
         Commands::CreatePageOnView { view_url, title } => {
             commands::create_page_on_view::run(&client, &view_url, title.as_deref())
         }

@@ -156,12 +156,12 @@ better-notion fetch-view-entries <VIEW_URL> [--additional-fields <FIELDS>]
 
 ## update-properties
 
-Update properties on a Notion page.
+Update properties, icon, and/or cover on a Notion page. At least one of `--properties`, `--icon`, or `--cover` must be provided.
 
 **Usage:**
 
 ```
-better-notion update-properties <PAGE> --properties <JSON>
+better-notion update-properties <PAGE> [--properties <JSON>] [--icon <ICON>] [--cover <URL>]
 ```
 
 **Parameters:**
@@ -169,7 +169,19 @@ better-notion update-properties <PAGE> --properties <JSON>
 | Name | Required | Description |
 |---|---|---|
 | `PAGE` | Yes | Notion page URL or page UUID |
-| `--properties` / `-p` | Yes | JSON object mapping property names to values. Values must be strings, numbers, or null. |
+| `--properties` / `-p` | No | JSON object mapping property names to values. Values must be strings, numbers, or null. |
+| `--icon` / `-i` | No | Page icon: an emoji (e.g. `🚀`), a custom emoji name (e.g. `:rocket:`), or an external image URL. Use `none` to remove. |
+| `--cover` / `-c` | No | Page cover: an external image URL. Use `none` to remove. |
+
+**Examples:**
+
+```
+# Set just the page emoji
+better-notion update-properties https://notion.so/My-Page-abc123 --icon 🚀
+
+# Update a property and the icon together
+better-notion update-properties https://notion.so/My-Page-abc123 -p '{"Status": "Done"}' -i ✅
+```
 
 **Property value formats:**
 
