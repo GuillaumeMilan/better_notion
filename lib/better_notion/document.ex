@@ -113,17 +113,33 @@ defmodule BetterNotion.Document do
     end
   end
 
+  # The Notion MCP backend is resolved at runtime so tests can inject a stub.
+  defp notion_mcp do
+    Application.get_env(:better_notion, :notion_mcp, BetterNotion.NotionMcpManager)
+  end
+
   defp fetch_from_notion(page_id) do
-    BetterNotion.NotionMcpManager.fetch_document(page_id)
+    notion_mcp().fetch_document(page_id)
   end
 
   def send_file_to_notion(path, content) do
     with {:ok, meta_content} <- File.read(file_metadata_path(path)),
          {:ok, metadata} <- Jason.decode(meta_content),
-         updates = compute_updates(metadata["content"], content),
-         {:ok, _} <- BetterNotion.NotionMcpManager.update_page(metadata["page_id"], updates) do
+         {:ok, _} <- push_content(metadata["page_id"], metadata["content"], content) do
       update_metadata!(path, content)
     end
+  end
+
+  # When the page has no content yet there is nothing to search-and-replace
+  # against. `update_content` would match the computed empty `old_str` against
+  # nothing and silently write nothing, so append the whole document instead.
+  defp push_content(page_id, server_content, content) when server_content in [nil, ""] do
+    notion_mcp().append_to_page(page_id, content)
+  end
+
+  defp push_content(page_id, server_content, content) do
+    updates = compute_updates(server_content, content)
+    notion_mcp().update_page(page_id, updates)
   end
 
   defp create_metadata!(page_id, path, content) do
