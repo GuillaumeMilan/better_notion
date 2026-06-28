@@ -21,6 +21,7 @@ fn main() {
             view_url,
             additional_fields,
         } => commands::fetch_view_entries::run(&client, &view_url, additional_fields),
+        Commands::FetchProperties { page } => commands::fetch_properties::run(&client, &page),
         Commands::UpdateProperties {
             page,
             properties,

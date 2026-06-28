@@ -30,6 +30,10 @@ defmodule BetterNotion.ApiPlug do
     handle_tool(conn, &Controller.fetch_view_entries/2, conn.body_params)
   end
 
+  post "/api/fetch_properties" do
+    handle_tool(conn, &Controller.fetch_properties/2, conn.body_params)
+  end
+
   post "/api/update_properties" do
     handle_tool(conn, &Controller.update_properties/2, conn.body_params)
   end

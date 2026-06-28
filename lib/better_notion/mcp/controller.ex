@@ -39,6 +39,18 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
+  def fetch_properties(_conn, %{"page" => page}) do
+    page_id = Document.extract_page_id(page)
+
+    case BetterNotion.NotionMcpManager.fetch_properties(page_id) do
+      {:ok, properties} ->
+        {:ok, CallResult.new(content: [ToolContent.text(Jason.encode!(properties))])}
+
+      {:error, reason} ->
+        {:error, "Failed to fetch properties: #{inspect(reason)}"}
+    end
+  end
+
   def update_properties(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
     properties = Map.get(args, "properties", %{})

@@ -51,6 +51,12 @@ pub enum Commands {
         additional_fields: Option<Vec<String>>,
     },
 
+    /// Fetch a Notion page's properties (including its icon) as JSON
+    FetchProperties {
+        /// Notion page URL or UUID
+        page: String,
+    },
+
     /// Update properties, icon, and/or cover on a Notion page
     UpdateProperties {
         /// Notion page URL or UUID

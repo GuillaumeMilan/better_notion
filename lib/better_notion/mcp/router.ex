@@ -43,6 +43,20 @@ defmodule BetterNotion.MCP.Router do
     )
   end
 
+  tool "fetch_properties",
+       """
+       Fetches a Notion page's properties as JSON, including its page-level icon.
+       Accepts a Notion page URL or ID. Returns the page's property values; when
+       the page has an icon (an emoji or an image URL) it is included under the
+       "icon" key. The cover is not returned — Notion's fetch does not expose it.
+       """,
+       BetterNotion.MCP.Controller,
+       :fetch_properties,
+       read_only_hint: true,
+       idempotent_hint: true do
+    input_field("page", "Notion page URL or page UUID", :string, required: true)
+  end
+
   tool "update_properties",
        """
        Updates a Notion page's properties, icon, and/or cover.
