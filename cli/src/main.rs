@@ -24,6 +24,9 @@ fn main() {
         Commands::UpdateProperties { page, properties } => {
             commands::update_properties::run(&client, &page, &properties)
         }
+        Commands::CreatePageOnView { view_url, title } => {
+            commands::create_page_on_view::run(&client, &view_url, title.as_deref())
+        }
         Commands::Completions { shell } => commands::completions::run(shell),
     }
 }
