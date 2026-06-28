@@ -61,6 +61,16 @@ pub enum Commands {
         properties: String,
     },
 
+    /// [EXPERIMENTAL] Create a page in a view that matches the view's filters
+    CreatePageOnView {
+        /// Notion database view URL
+        view_url: String,
+
+        /// Title for the new page (default "New page")
+        #[arg(long, short)]
+        title: Option<String>,
+    },
+
     /// Generate shell completions
     Completions {
         /// The shell to generate completions for
