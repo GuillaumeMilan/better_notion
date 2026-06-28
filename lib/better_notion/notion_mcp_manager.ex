@@ -335,7 +335,7 @@ defmodule BetterNotion.NotionMcpManager do
   end
 
   @doc """
-  Updates properties on a Notion page.
+  Updates properties on a Notion page, and optionally its icon and/or cover.
 
   The `properties` argument is a map of property names to SQLite values
   (string, number, or null). Property names must match the exact names
@@ -347,6 +347,19 @@ defmodule BetterNotion.NotionMcpManager do
   - Number properties: use plain numbers (not strings)
   - Properties named "id" or "url": prefix with "userDefined:"
 
+  ## Icon and cover
+
+  Pass `:icon` and/or `:cover` in `opts` to set them in the same call. They
+  ride alongside the `update_properties` command, so an icon/cover-only update
+  works with an empty `properties` map (omitting `properties` entirely would
+  make the underlying tool reject the request).
+
+  - `:icon` — an emoji character (e.g. "🚀"), a custom emoji by name
+    (e.g. ":rocket_ship:"), or an external image URL. Use "none" to remove it.
+  - `:cover` — an external image URL. Use "none" to remove it.
+
+  A `nil` icon/cover is omitted, leaving the existing value unchanged.
+
   ## Examples
 
       # Update a select property
@@ -357,16 +370,17 @@ defmodule BetterNotion.NotionMcpManager do
         "date:Done at:start" => "2026-03-18",
         "date:Done at:is_datetime" => 0
       })
-  """
-  @spec update_properties(String.t(), map()) :: {:ok, any()} | {:error, any()}
-  def update_properties(page_id, properties) when is_map(properties) do
-    args = %{
-      "page_id" => page_id,
-      "command" => "update_properties",
-      "properties" => properties
-    }
 
-    with {:ok, result} <- call_tool("notion-update-page", args) do
+      # Set just the page emoji
+      update_properties(page_id, %{}, icon: "🚀")
+
+      # Update a property and the icon together
+      update_properties(page_id, %{"Status*" => "Done"}, icon: "✅")
+  """
+  @spec update_properties(String.t(), map(), keyword()) :: {:ok, any()} | {:error, any()}
+  def update_properties(page_id, properties, opts \\ []) when is_map(properties) do
+    with {:ok, result} <-
+           call_tool("notion-update-page", update_page_args(page_id, properties, opts)) do
       case result do
         %{"isError" => true, "content" => [%{"text" => text} | _]} ->
           {:error, text}
@@ -376,6 +390,23 @@ defmodule BetterNotion.NotionMcpManager do
       end
     end
   end
+
+  @doc false
+  # Builds the `notion-update-page` arguments for an `update_properties` call.
+  # `:icon`/`:cover` are included only when provided (nil = leave unchanged).
+  @spec update_page_args(String.t(), map(), keyword()) :: map()
+  def update_page_args(page_id, properties, opts \\ []) do
+    %{
+      "page_id" => page_id,
+      "command" => "update_properties",
+      "properties" => properties
+    }
+    |> maybe_put("icon", Keyword.get(opts, :icon))
+    |> maybe_put("cover", Keyword.get(opts, :cover))
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)

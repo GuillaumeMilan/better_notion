@@ -45,8 +45,9 @@ defmodule BetterNotion.MCP.Router do
 
   tool "update_properties",
        """
-       Updates properties on a Notion page.
-       Accepts a Notion page URL or ID and a map of property names to values.
+       Updates a Notion page's properties, icon, and/or cover.
+       Accepts a Notion page URL or ID. Provide any combination of `properties`,
+       `icon`, and `cover` — e.g. set just an emoji without touching properties.
        Property values must be SQLite-compatible types: strings, numbers, or null.
        Use exact property names from the page's data source schema.
        Special formats: date properties use "date:{name}:start"/"date:{name}:is_datetime",
@@ -59,8 +60,19 @@ defmodule BetterNotion.MCP.Router do
     input_field(
       "properties",
       "Map of property names to values (string, number, or null)",
-      :object,
-      required: true
+      :object
+    )
+
+    input_field(
+      "icon",
+      "Page icon: an emoji (e.g. \"🚀\"), a custom emoji name (e.g. \":rocket:\"), or an external image URL. Use \"none\" to remove.",
+      :string
+    )
+
+    input_field(
+      "cover",
+      "Page cover: an external image URL. Use \"none\" to remove.",
+      :string
     )
   end
 

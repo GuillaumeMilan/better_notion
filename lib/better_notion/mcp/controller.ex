@@ -39,15 +39,20 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
-  def update_properties(_conn, %{"page" => page, "properties" => properties}) do
+  def update_properties(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
+    properties = Map.get(args, "properties", %{})
 
-    case BetterNotion.NotionMcpManager.update_properties(page_id, properties) do
+    opts =
+      [icon: Map.get(args, "icon"), cover: Map.get(args, "cover")]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+
+    case BetterNotion.NotionMcpManager.update_properties(page_id, properties, opts) do
       {:ok, _result} ->
-        {:ok, CallResult.new(content: [ToolContent.text("Properties updated successfully")])}
+        {:ok, CallResult.new(content: [ToolContent.text("Page updated successfully")])}
 
       {:error, reason} ->
-        {:error, "Failed to update properties: #{inspect(reason)}"}
+        {:error, "Failed to update page: #{inspect(reason)}"}
     end
   end
 
