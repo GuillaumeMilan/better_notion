@@ -34,6 +34,10 @@ defmodule BetterNotion.ApiPlug do
     handle_tool(conn, &Controller.update_properties/2, conn.body_params)
   end
 
+  post "/api/create_page_on_view" do
+    handle_tool(conn, &Controller.create_page_on_view/2, conn.body_params)
+  end
+
   match _ do
     send_json(conn, 404, %{ok: false, error: "Not found"})
   end
