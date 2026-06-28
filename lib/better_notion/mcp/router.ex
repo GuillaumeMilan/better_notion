@@ -80,6 +80,20 @@ defmodule BetterNotion.MCP.Router do
     input_field("title", "Title for the new page (default \"New page\")", :string)
   end
 
+  tool "duplicate_page",
+       """
+       Duplicates a Notion page.
+       Copies the title (with " (Copy)" appended), all properties, and the full
+       page body into a new page under the same parent.
+       Accepts a Notion page URL or page ID. Returns the new page id and url as JSON.
+       Note: Notion performs the duplication asynchronously, so the new page's
+       body may take a few moments to be fully populated.
+       """,
+       BetterNotion.MCP.Controller,
+       :duplicate_page do
+    input_field("page", "Notion page URL or page UUID", :string, required: true)
+  end
+
   tool "fetch_document",
        """
        Fetches a Notion document and returns a path where the document has been saved.

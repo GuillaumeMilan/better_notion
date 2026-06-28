@@ -64,6 +64,19 @@ defmodule BetterNotion.MCP.Controller do
     end
   end
 
+  def duplicate_page(_conn, %{"page" => page}) do
+    page_id = Document.extract_page_id(page)
+
+    case BetterNotion.NotionMcpManager.duplicate_page(page_id) do
+      {:ok, %{page_id: new_id, url: url}} ->
+        response = Jason.encode!(%{page_id: new_id, url: url})
+        {:ok, CallResult.new(content: [ToolContent.text(response)])}
+
+      {:error, reason} ->
+        {:error, "Failed to duplicate page: #{inspect(reason)}"}
+    end
+  end
+
   def fetch_document(_conn, %{"page" => page} = args) do
     page_id = Document.extract_page_id(page)
 

@@ -38,6 +38,10 @@ defmodule BetterNotion.ApiPlug do
     handle_tool(conn, &Controller.create_page_on_view/2, conn.body_params)
   end
 
+  post "/api/duplicate_page" do
+    handle_tool(conn, &Controller.duplicate_page/2, conn.body_params)
+  end
+
   match _ do
     send_json(conn, 404, %{ok: false, error: "Not found"})
   end

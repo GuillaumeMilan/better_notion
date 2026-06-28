@@ -5,9 +5,8 @@ pub fn run(client: &ApiClient, view_url: &str, additional_fields: Option<Vec<Str
     let mut args = serde_json::json!({ "view_url": view_url });
 
     if let Some(fields) = additional_fields {
-        args["additional_fields"] = serde_json::Value::Array(
-            fields.into_iter().map(serde_json::Value::String).collect(),
-        );
+        args["additional_fields"] =
+            serde_json::Value::Array(fields.into_iter().map(serde_json::Value::String).collect());
     }
 
     let result = client

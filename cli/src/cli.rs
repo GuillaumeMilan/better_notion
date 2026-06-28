@@ -10,7 +10,11 @@ use clap_complete::Shell;
 )]
 pub struct Cli {
     /// MCP server URL
-    #[arg(long, env = "BETTER_NOTION_URL", default_value = "http://localhost:4000")]
+    #[arg(
+        long,
+        env = "BETTER_NOTION_URL",
+        default_value = "http://localhost:4000"
+    )]
     pub server_url: String,
 
     /// Enable verbose output
@@ -59,6 +63,12 @@ pub enum Commands {
         /// Properties as a JSON string, e.g. '{"Status": "Done"}'
         #[arg(long, short)]
         properties: String,
+    },
+
+    /// Duplicate a Notion page (title + " (Copy)", all properties, and body)
+    DuplicatePage {
+        /// Notion page URL or UUID
+        page: String,
     },
 
     /// [EXPERIMENTAL] Create a page in a view that matches the view's filters

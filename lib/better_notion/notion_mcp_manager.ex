@@ -2,6 +2,7 @@ defmodule BetterNotion.NotionMcpManager do
   import SweetXml, only: [sigil_x: 2]
   alias BetterNotion.Document
   alias BetterNotion.FilterSolver
+  alias BetterNotion.PageDuplication
 
   @moduledoc """
   Manages the lifecycle of a McpClient connected to Notion's MCP server.
@@ -221,6 +222,85 @@ defmodule BetterNotion.NotionMcpManager do
         _ ->
           parse_created_page(result)
       end
+    end
+  end
+
+  @doc """
+  Duplicates a Notion page.
+
+  Copies the title (with `" (Copy)"` appended), all properties, and the full
+  page body into a new page under the same parent, and returns the new page's
+  id and url.
+
+  Duplication relies on Notion's native duplicate, which faithfully copies
+  every property — including read-only/system fields, relations and rollups —
+  and the page body as-is. Notion runs the duplication asynchronously and only
+  accepts updates to the new page once it has finalized, so the title rename is
+  retried with backoff until it succeeds.
+  """
+  @spec duplicate_page(String.t()) ::
+          {:ok, %{page_id: String.t(), url: String.t()}} | {:error, any()}
+  def duplicate_page(page_id) do
+    with {:ok, page_result} <- call_tool("notion-fetch", %{"id" => page_id}),
+         page_text = fetch_text(page_result),
+         {:ok, title_property} <- title_property_for_page(page_text),
+         {:ok, original_title} <- PageDuplication.read_title(page_text, title_property),
+         {:ok, %{page_id: new_id, url: url}} <- native_duplicate(page_id),
+         {:ok, _} <- rename_duplicate(new_id, title_property, original_title <> " (Copy)") do
+      {:ok, %{page_id: new_id, url: url}}
+    end
+  end
+
+  # Resolves the name of the page's title property. For a page in a database we
+  # read the parent data source schema; standalone pages always use "title".
+  defp title_property_for_page(page_text) do
+    case PageDuplication.parent_data_source_id(page_text) do
+      nil ->
+        {:ok, "title"}
+
+      data_source_id ->
+        with {:ok, ds_result} <- call_tool("notion-fetch", %{"id" => data_source_id}),
+             {:ok, schema} <- extract_data_source_schema(ds_result) do
+          find_title_property(schema)
+        end
+    end
+  end
+
+  defp native_duplicate(page_id) do
+    with {:ok, result} <- call_tool("notion-duplicate-page", %{"page_id" => page_id}) do
+      case result do
+        %{"isError" => true, "content" => [%{"text" => text} | _]} ->
+          {:error, text}
+
+        _ ->
+          PageDuplication.parse_duplicate_result(result)
+      end
+    end
+  end
+
+  # Notion duplicates pages asynchronously: for a short window the new page
+  # exists and is readable, but `notion-update-page` rejects it as "not a page".
+  # Retry the title rename with backoff until the duplication has finalized.
+  @duplicate_rename_attempts 15
+  @duplicate_rename_interval_ms 4_000
+
+  defp rename_duplicate(
+         page_id,
+         title_property,
+         new_title,
+         attempts \\ @duplicate_rename_attempts
+       ) do
+    case update_properties(page_id, %{title_property => new_title}) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, reason} ->
+        if attempts > 1 and PageDuplication.duplicate_in_progress?(reason) do
+          Process.sleep(@duplicate_rename_interval_ms)
+          rename_duplicate(page_id, title_property, new_title, attempts - 1)
+        else
+          {:error, reason}
+        end
     end
   end
 

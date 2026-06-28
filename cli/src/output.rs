@@ -12,7 +12,6 @@ pub trait Decorate: std::fmt::Display {
     fn deco_as_path(&self) -> ColoredString {
         self.to_string().bright_green()
     }
-
 }
 
 impl Decorate for String {}
