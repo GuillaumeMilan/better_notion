@@ -111,6 +111,12 @@ defmodule BetterNotion.FilterSolver do
     {:warn, warn(name, "relation_contains", "relative relation values are not resolved")}
   end
 
+  # relation "contains" a value we can't turn into a single concrete page
+  # (e.g. a multi-page/list value, or a dynamic reference such as "current sprint")
+  defp solve_filter(%{"operator" => "relation_contains", "property" => name}, _schema) do
+    {:warn, warn(name, "relation_contains", "the relation value is not a single concrete page")}
+  end
+
   # person filters are never resolved (per design)
   defp solve_filter(%{"operator" => "person_contains", "property" => name}, _schema) do
     {:warn, warn(name, "person_contains", "person filters are not resolved")}
@@ -237,6 +243,9 @@ defmodule BetterNotion.FilterSolver do
   defp normalize(value), do: value
 
   defp warn(name, operator, reason) do
-    "Could not auto-satisfy filter #{operator} on \"#{name}\" (#{reason})."
+    "Could not auto-satisfy filter #{operator} on \"#{name}\" (#{reason}). " <>
+      "The \"#{name}\" property was left unset — set it manually with " <>
+      "`better-notion update-properties <page> -p '{\"#{name}\": <value>}'` " <>
+      "(inspect current values with `better-notion fetch-properties <page>`)."
   end
 end
