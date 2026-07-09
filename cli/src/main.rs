@@ -13,6 +13,7 @@ fn main() {
 
     match args.command {
         Commands::Ping => commands::ping::run(&client),
+        Commands::Login => commands::login::run(&client),
         Commands::FetchDocument { page, path } => {
             commands::fetch_document::run(&client, &page, path.as_deref())
         }

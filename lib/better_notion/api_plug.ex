@@ -9,6 +9,7 @@ defmodule BetterNotion.ApiPlug do
   use Plug.Router
 
   alias BetterNotion.MCP.Controller
+  alias BetterNotion.NotionAuth
 
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
@@ -18,32 +19,59 @@ defmodule BetterNotion.ApiPlug do
     handle_tool(conn, &Controller.ping/2, conn.body_params)
   end
 
+  post "/api/login" do
+    case NotionAuth.start_auth_flow(conn.body_params["base_url"]) do
+      {:ok, auth_url} ->
+        send_json(conn, 200, %{ok: true, text: auth_url})
+
+      {:error, reason} ->
+        send_json(conn, 200, %{ok: false, error: "Failed to start login: #{inspect(reason)}"})
+    end
+  end
+
   post "/api/fetch_document" do
-    handle_tool(conn, &Controller.fetch_document/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.fetch_document/2, conn.body_params) end)
   end
 
   post "/api/commit_document" do
-    handle_tool(conn, &Controller.commit_document/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.commit_document/2, conn.body_params) end)
   end
 
   post "/api/fetch_view_entries" do
-    handle_tool(conn, &Controller.fetch_view_entries/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.fetch_view_entries/2, conn.body_params) end)
   end
 
   post "/api/fetch_properties" do
-    handle_tool(conn, &Controller.fetch_properties/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.fetch_properties/2, conn.body_params) end)
   end
 
   post "/api/update_properties" do
-    handle_tool(conn, &Controller.update_properties/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.update_properties/2, conn.body_params) end)
   end
 
   post "/api/create_page_on_view" do
-    handle_tool(conn, &Controller.create_page_on_view/2, conn.body_params)
+    with_auth(conn, fn -> handle_tool(conn, &Controller.create_page_on_view/2, conn.body_params) end)
   end
 
   match _ do
     send_json(conn, 404, %{ok: false, error: "Not found"})
+  end
+
+  # Gate a tool call behind authentication. Returns a structured
+  # `not_authenticated` error (rather than blocking) when the user is logged
+  # out, so the CLI can prompt them to run `better-notion login`.
+  defp with_auth(conn, fun) do
+    case NotionAuth.ensure_authenticated() do
+      {:ok, _token} ->
+        fun.()
+
+      {:error, _reason} ->
+        send_json(conn, 200, %{
+          ok: false,
+          error: "Not authenticated. Run `better-notion login` to connect to Notion.",
+          error_code: "not_authenticated"
+        })
+    end
   end
 
   defp handle_tool(conn, fun, params) do

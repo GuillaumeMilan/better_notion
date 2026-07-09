@@ -25,10 +25,6 @@ defmodule BetterNotion.FilterSolver do
           {:set, name, value} ->
             put_prop(props, warnings, name, value)
 
-          {:set_and_warn, name, value, message} ->
-            {p, w} = put_prop(props, warnings, name, value)
-            {p, [message | w]}
-
           {:warn, message} ->
             {props, [message | warnings]}
 

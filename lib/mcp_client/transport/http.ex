@@ -231,7 +231,7 @@ defmodule McpClient.Transport.Http do
     Logger.warning("HTTP connection error: #{inspect(reason)}")
 
     # Close the connection and notify client
-    state = may_send_error_to_client(state, ref, map_error({:network_error, reason}))
+    state = may_send_error_to_client(state, ref, {:network_error, reason})
     {:ok, state}
   end
 
@@ -649,16 +649,4 @@ defmodule McpClient.Transport.Http do
     end
   end
 
-  # TODO Unused The pattern can never match the type.
-  defp map_error({:auth_required, details}), do: {:auth_required, details}
-  defp map_error({:network_error, reason}), do: {:network_error, reason}
-  defp map_error({:http_error, details}), do: {:protocol_error, details}
-  defp map_error({:json_encode_error, reason}), do: {:protocol_error, {:json_encode, reason}}
-  defp map_error({:json_decode_error, reason}), do: {:protocol_error, {:json_decode, reason}}
-  defp map_error({:sse_stream_error, reason}), do: {:protocol_error, {:sse_stream, reason}}
-  defp map_error({:sse_error, reason}), do: {:protocol_error, {:sse, reason}}
-  defp map_error({:response_body_error, reason}), do: {:protocol_error, {:response_body, reason}}
-  defp map_error({:missing_required_option, key}), do: {:config_error, {:missing_option, key}}
-  defp map_error({:invalid_url, reason}), do: {:config_error, {:invalid_url, reason}}
-  defp map_error(reason), do: reason
 end

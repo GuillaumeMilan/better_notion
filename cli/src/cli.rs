@@ -26,6 +26,9 @@ pub enum Commands {
     /// Ping the MCP server
     Ping,
 
+    /// Authenticate with Notion — prints an authorization URL to open in your browser
+    Login,
+
     /// Fetch a Notion document and save as markdown
     FetchDocument {
         /// Notion page URL or UUID

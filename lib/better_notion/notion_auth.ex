@@ -148,8 +148,11 @@ defmodule BetterNotion.NotionAuth do
   @doc """
   Ensures we have a valid access token. Tries in order:
   1. Return cached valid token
-  2. Refresh expired token
-  3. Initiate full browser-based OAuth flow
+  2. Refresh an expired token
+
+  Never opens a browser: when there is no token and none can be refreshed, it
+  returns `{:error, :not_authenticated}`. Starting a fresh authorization is an
+  explicit action — see `start_auth_flow/0`, driven by `better-notion login`.
 
   Returns `{:ok, access_token}` or `{:error, reason}`.
   """
@@ -163,7 +166,7 @@ defmodule BetterNotion.NotionAuth do
         attempt_refresh()
 
       {:error, :not_authenticated} ->
-        initiate_auth_flow()
+        {:error, :not_authenticated}
     end
   end
 
@@ -178,33 +181,36 @@ defmodule BetterNotion.NotionAuth do
       BetterNotion.TokenStore.store_tokens(new_tokens)
       {:ok, new_tokens["access_token"]}
     else
-      nil ->
-        Logger.warning("No tokens available for refresh, initiating full auth flow")
-        initiate_auth_flow()
-
       {:error, reason} ->
-        Logger.warning("Token refresh failed: #{inspect(reason)}, initiating full auth flow")
+        Logger.warning("Token refresh failed: #{inspect(reason)}")
         BetterNotion.TokenStore.clear_tokens()
-        initiate_auth_flow()
+        {:error, :not_authenticated}
+
+      _ ->
+        {:error, :not_authenticated}
     end
   end
 
   @doc """
-  Initiates the full browser-based OAuth flow.
+  Starts an OAuth authorization flow and returns the URL the user must visit.
 
-  1. Discovers OAuth configuration
-  2. Registers a dynamic client
-  3. Generates PKCE and state
-  4. Stores OAuth state in ETS
-  5. Prints the authorization URL to the console
-  6. Waits for the callback (up to 5 minutes)
+  Runs discovery, dynamic client registration, and PKCE/state generation, then
+  stores the state so the `/oauth/callback` endpoint can complete the token
+  exchange once the user finishes authorizing in their browser. Unlike a
+  browser-driven flow, this neither opens a browser nor blocks — the caller is
+  responsible for presenting the URL (e.g. `better-notion login` prints it).
 
-  Returns `{:ok, access_token}` or `{:error, reason}`.
+  Returns `{:ok, authorization_url}` or `{:error, reason}`.
   """
-  @spec initiate_auth_flow() :: {:ok, String.t()} | {:error, any()}
-  def initiate_auth_flow do
-    port = Application.get_env(:better_notion, :mcp_port, 4000)
-    redirect_uri = "http://localhost:#{port}#{@callback_path}"
+  @spec start_auth_flow(String.t() | nil) :: {:ok, String.t()} | {:error, any()}
+  def start_auth_flow(base_url \\ nil) do
+    base_url =
+      case base_url do
+        url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
+        _ -> Application.get_env(:better_notion, :base_url, "http://localhost:4000")
+      end
+
+    redirect_uri = base_url <> @callback_path
 
     with {:ok, discovery_info} <- discover_oauth_configuration(),
          {:ok, client_info} <- register_client(discovery_info, redirect_uri) do
@@ -216,8 +222,7 @@ defmodule BetterNotion.NotionAuth do
         pkce: pkce_params,
         client_info: client_info,
         discovery_info: discovery_info,
-        redirect_uri: redirect_uri,
-        waiting_pid: self()
+        redirect_uri: redirect_uri
       }
 
       BetterNotion.TokenStore.store_oauth_state(state, oauth_state)
@@ -225,31 +230,7 @@ defmodule BetterNotion.NotionAuth do
       auth_url =
         build_authorization_url(discovery_info, client_info, pkce_params, state, redirect_uri)
 
-      Logger.info("OAuth authorization required. Opening browser...")
-      open_in_browser(auth_url)
-
-      # Wait for the callback to notify us (up to 5 minutes)
-      receive do
-        {:oauth_complete, {:ok, access_token}} ->
-          {:ok, access_token}
-
-        {:oauth_complete, {:error, reason}} ->
-          {:error, reason}
-      after
-        300_000 ->
-          BetterNotion.TokenStore.delete_oauth_state(state)
-          {:error, :auth_timeout}
-      end
-    end
-  end
-
-  # --- Browser Helper ---
-
-  defp open_in_browser(url) do
-    case :os.type() do
-      {:unix, :darwin} -> System.cmd("open", [url])
-      {:unix, _} -> System.cmd("xdg-open", [url])
-      {:win32, _} -> System.cmd("cmd", ["/c", "start", url])
+      {:ok, auth_url}
     end
   end
 

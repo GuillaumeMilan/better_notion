@@ -468,6 +468,16 @@ defmodule BetterNotion.NotionMcpManager do
     GenServer.call(__MODULE__, :status)
   end
 
+  @doc """
+  Notifies the manager that authentication just succeeded (e.g. the OAuth
+  callback stored fresh tokens). Prompts a connection attempt so a completed
+  `better-notion login` takes effect without waiting for the next request.
+  """
+  @spec notify_authenticated() :: :ok
+  def notify_authenticated do
+    GenServer.cast(__MODULE__, :authenticated)
+  end
+
   # --- GenServer Callbacks ---
 
   @impl true
@@ -489,8 +499,13 @@ defmodule BetterNotion.NotionMcpManager do
       {:ok, _token} ->
         {:noreply, try_connect(state)}
 
-      {:error, _reason} ->
+      {:error, :expired} ->
         {:noreply, start_auth(state)}
+
+      {:error, :not_authenticated} ->
+        # No token and nothing to refresh. Don't drive an interactive flow here;
+        # the user connects explicitly via `better-notion login`.
+        {:noreply, %{state | mode: :unauthenticated}}
     end
   end
 
@@ -538,6 +553,34 @@ defmodule BetterNotion.NotionMcpManager do
     end
   end
 
+  # Unauthenticated: no valid token. Re-check first in case the user just ran
+  # `better-notion login`; otherwise fail fast so callers get a clear signal
+  # instead of blocking on a flow that can't complete without user action.
+  def handle_call(request, from, %{mode: :unauthenticated} = state)
+      when request in [:list_tools, :list_resources] or
+             (is_tuple(request) and tuple_size(request) == 3 and elem(request, 0) == :call_tool) or
+             (is_tuple(request) and tuple_size(request) == 2 and
+                elem(request, 0) == :read_resource) do
+    case BetterNotion.TokenStore.get_access_token() do
+      {:ok, _token} ->
+        {:noreply, state |> enqueue(from, request) |> try_connect()}
+
+      {:error, :expired} ->
+        {:noreply, state |> enqueue(from, request) |> start_auth()}
+
+      {:error, :not_authenticated} ->
+        {:reply, {:error, :not_authenticated}, state}
+    end
+  end
+
+  @impl true
+  def handle_cast(:authenticated, %{mode: :connected} = state), do: {:noreply, state}
+
+  def handle_cast(:authenticated, %{auth_ref: ref} = state) when ref != nil,
+    do: {:noreply, state}
+
+  def handle_cast(:authenticated, state), do: {:noreply, try_connect(state)}
+
   @impl true
   def handle_info({:auth_complete, ref, result}, %{auth_ref: ref} = state) do
     case result do
@@ -548,7 +591,7 @@ defmodule BetterNotion.NotionMcpManager do
       {:error, reason} ->
         Logger.error("Authentication failed: #{inspect(reason)}")
         state = flush_queue(state, {:error, :not_authenticated})
-        {:noreply, start_auth(%{state | auth_ref: nil})}
+        {:noreply, %{state | mode: :unauthenticated, auth_ref: nil}}
     end
   end
 
@@ -629,11 +672,13 @@ defmodule BetterNotion.NotionMcpManager do
     manager = self()
 
     spawn(fn ->
+      # Refresh-only: never opens a browser. On failure the manager moves to
+      # `:unauthenticated` and the user reconnects via `better-notion login`.
       result = BetterNotion.NotionAuth.ensure_authenticated()
       send(manager, {:auth_complete, ref, result})
     end)
 
-    Logger.info("Authentication flow started")
+    Logger.info("Attempting to (re)authenticate with existing tokens")
     %{state | mode: :stalled, auth_ref: ref}
   end
 

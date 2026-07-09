@@ -57,15 +57,12 @@ defmodule BetterNotion.OAuthCallbackPlug do
             TokenStore.store_tokens(token_data)
             TokenStore.delete_oauth_state(state)
 
-            # Notify the waiting process if any
-            if pid = oauth_state[:waiting_pid] do
-              send(pid, {:oauth_complete, {:ok, token_data["access_token"]}})
-            end
+            # Prompt the MCP manager to connect now that we have a fresh token.
+            BetterNotion.NotionMcpManager.notify_authenticated()
 
             send_html(conn, 200, success_page())
 
           {:error, reason} ->
-            notify_error(oauth_state, reason)
             send_html(conn, 500, error_page("token_exchange_failed", inspect(reason)))
         end
 
@@ -82,12 +79,6 @@ defmodule BetterNotion.OAuthCallbackPlug do
           400,
           error_page("state_expired", "OAuth session expired. Please try again.")
         )
-    end
-  end
-
-  defp notify_error(oauth_state, reason) do
-    if pid = oauth_state[:waiting_pid] do
-      send(pid, {:oauth_complete, {:error, reason}})
     end
   end
 

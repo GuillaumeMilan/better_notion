@@ -14,6 +14,13 @@ impl ApiClient {
         }
     }
 
+    /// The externally-reachable base URL this client targets (from
+    /// `BETTER_NOTION_URL`). The server uses it to build the OAuth redirect URI
+    /// so the callback points back at a URL the browser can actually reach.
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub fn call(&self, endpoint: &str, body: serde_json::Value) -> Result<String, CliError> {
         let url = format!("{}/api/{}", self.base_url, endpoint);
 
@@ -44,6 +51,12 @@ impl ApiClient {
                 .map(|s| s.to_string())
                 .ok_or_else(|| CliError::JsonParse("Missing 'text' field in response".into()))
         } else {
+            let error_code = response_body.get("error_code").and_then(|v| v.as_str());
+
+            if error_code == Some("not_authenticated") {
+                return Err(CliError::NotAuthenticated);
+            }
+
             let error = response_body
                 .get("error")
                 .and_then(|v| v.as_str())

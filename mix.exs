@@ -28,7 +28,7 @@ defmodule BetterNotion.MixProject do
     [
       {:hackney, "~> 1.17"},
       {:jason, "~> 1.4"},
-      {:mcp_server, "~> 0.8.0"},
+      {:mcp_server, "~> 0.10.0"},
       {:bandit, "~> 1.0"},
       {:sweet_xml, "~> 0.7.5"}
     ]
