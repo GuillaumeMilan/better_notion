@@ -373,10 +373,21 @@ defmodule McpClient.Transport.Http do
   end
 
   defp merge_cookies(existing_cookies, new_cookies) do
-    # For simplicity, we'll append new cookies to existing ones
-    # In a production system, you might want to parse cookie names
-    # and replace cookies with the same name
-    existing_cookies ++ new_cookies
+    # Merge by cookie name: a re-issued cookie must replace the previous value
+    # rather than accumulate, otherwise the outgoing Cookie header would send
+    # stale values alongside fresh ones (e.g. "session=old; session=new").
+    Enum.reduce(new_cookies, existing_cookies, fn new_cookie, acc ->
+      new_name = cookie_name(new_cookie)
+      acc = Enum.reject(acc, fn cookie -> cookie_name(cookie) == new_name end)
+      acc ++ [new_cookie]
+    end)
+  end
+
+  defp cookie_name(cookie) do
+    cookie
+    |> String.split("=", parts: 2)
+    |> hd()
+    |> String.trim()
   end
 
   defp emit_response(state, ref) do
